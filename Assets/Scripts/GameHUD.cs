@@ -8,8 +8,44 @@ using TMPro;
 public class GameHUD : MonoBehaviour
 {
     const int MaxThreatArrows = 8;
+    const int MaxDamageNumbers = 16;
+    const float DamageNumberLife = 0.9f;
 
+    static readonly Color HealthHigh = new Color(0.3f, 0.9f, 0.35f, 1f);
+    static readonly Color HealthLow = new Color(0.95f, 0.15f, 0.1f, 1f);
+    static readonly Color AimOnTarget = new Color(1f, 0.25f, 0.2f, 1f);
+
+    class DamageNumber
+    {
+        public TMP_Text text;
+        public Vector3 worldPosition;
+        public float startTime;
+        public float scale;
+    }
+
+    Canvas canvas;
     RectTransform root;
+    Image healthFill;
+    Image healthGhost;
+    TMP_Text healthValue;
+    float healthTarget = 1f;
+    float healthShown = 1f;
+    float healthGhostShown = 1f;
+    float healthGhostHoldUntil;
+    int healthShownValue = -1;
+    TMP_Text weaponText;
+    TMP_Text roundsText;
+    TMP_Text grenadeText;
+    TMP_Text calloutText;
+    float calloutStart = -10f;
+    float calloutUntil;
+    readonly List<DamageNumber> damageNumbers = new List<DamageNumber>();
+    int nextDamageNumber;
+    bool aimOnTarget;
+    CanvasGroup resultsGroup;
+    TMP_Text resultsTitle;
+    TMP_Text resultsBody;
+    Coroutine resultsRoutine;
     RawImage vignette;
     RectTransform crosshair;
     Image crosshairImage;
@@ -40,6 +76,7 @@ public class GameHUD : MonoBehaviour
         rect.SetAsFirstSibling();
 
         GameHUD hud = holder.AddComponent<GameHUD>();
+        hud.canvas = canvas;
         hud.Build(rect, textTemplate);
         return hud;
     }
@@ -51,6 +88,17 @@ public class GameHUD : MonoBehaviour
         vignette = NewRawImage("Vignette", GameFX.VignetteTexture);
         Stretch(vignette.rectTransform);
         vignette.color = new Color(0.6f, 0f, 0f, 0f);
+
+        // dark fade behind the top of the HUD so it reads over any camera image
+        RawImage shade = NewRawImage("TopShade", GameFX.TopShadeTexture);
+        shade.rectTransform.anchorMin = new Vector2(0f, 1f);
+        shade.rectTransform.anchorMax = new Vector2(1f, 1f);
+        shade.rectTransform.pivot = new Vector2(0.5f, 1f);
+        shade.rectTransform.sizeDelta = new Vector2(0f, 190f);
+        shade.color = new Color(0f, 0f, 0f, 0.6f);
+
+        BuildHealthPanel(template);
+        BuildAmmoPanel(template);
 
         crosshairImage = NewImage("Crosshair", GameFX.RingSprite);
         crosshair = crosshairImage.rectTransform;
@@ -123,6 +171,118 @@ public class GameHUD : MonoBehaviour
         bannerBody.rectTransform.anchorMax = new Vector2(1f, 0.5f);
         bannerBody.rectTransform.offsetMin = new Vector2(16f, 0f);
         bannerBody.rectTransform.offsetMax = new Vector2(-16f, -8f);
+
+        // short call-outs like HEADSHOT! pop up above the crosshair
+        calloutText = NewText(template, "Callout", 34f, TextAlignmentOptions.Center, root);
+        calloutText.rectTransform.anchorMin = calloutText.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        calloutText.rectTransform.sizeDelta = new Vector2(900f, 60f);
+        calloutText.rectTransform.anchoredPosition = new Vector2(0f, 150f);
+        calloutText.fontStyle = FontStyles.Bold;
+
+        for (int i = 0; i < MaxDamageNumbers; i++)
+        {
+            TMP_Text number = NewText(template, "DamageNumber", 26f, TextAlignmentOptions.Center, root);
+            number.rectTransform.anchorMin = number.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            number.rectTransform.sizeDelta = new Vector2(200f, 40f);
+            number.fontStyle = FontStyles.Bold;
+            number.gameObject.SetActive(false);
+            damageNumbers.Add(new DamageNumber { text = number });
+        }
+
+        BuildResultsCard(template);
+    }
+
+    void BuildHealthPanel(TMP_Text template)
+    {
+        RectTransform panel = NewRect("HealthPanel", root);
+        panel.anchorMin = panel.anchorMax = new Vector2(0f, 1f);
+        panel.pivot = new Vector2(0f, 1f);
+        panel.anchoredPosition = new Vector2(18f, -14f);
+        panel.sizeDelta = new Vector2(250f, 46f);
+
+        // "HEALTH 100" sits on the left so a long score line in the centre can't run into it
+        healthValue = NewText(template, "Label", 18f, TextAlignmentOptions.BottomLeft, panel);
+        healthValue.rectTransform.anchorMin = new Vector2(0f, 1f);
+        healthValue.rectTransform.anchorMax = new Vector2(1f, 1f);
+        healthValue.rectTransform.pivot = new Vector2(0f, 1f);
+        healthValue.rectTransform.sizeDelta = new Vector2(0f, 22f);
+        healthValue.color = new Color(1f, 1f, 1f, 0.7f);
+        healthValue.characterSpacing = 6f;
+
+        // bar: dark track, a pale "ghost" that trails damage, then the live fill
+        RectTransform bar = NewRect("Bar", panel);
+        bar.anchorMin = new Vector2(0f, 0f);
+        bar.anchorMax = new Vector2(1f, 0f);
+        bar.pivot = new Vector2(0.5f, 0f);
+        bar.sizeDelta = new Vector2(0f, 16f);
+        Image track = bar.gameObject.AddComponent<Image>();
+        track.sprite = GameFX.WhiteSprite;
+        track.color = new Color(0f, 0f, 0f, 0.55f);
+        track.raycastTarget = false;
+
+        healthGhost = NewFill("Ghost", bar, new Color(1f, 0.95f, 0.85f, 0.75f));
+        healthFill = NewFill("Fill", bar, HealthHigh);
+    }
+
+    void BuildAmmoPanel(TMP_Text template)
+    {
+        RectTransform panel = NewRect("AmmoPanel", root);
+        panel.anchorMin = panel.anchorMax = new Vector2(1f, 1f);
+        panel.pivot = new Vector2(1f, 1f);
+        panel.anchoredPosition = new Vector2(-18f, -10f);
+        panel.sizeDelta = new Vector2(240f, 90f);
+
+        weaponText = NewText(template, "Weapon", 18f, TextAlignmentOptions.TopRight, panel);
+        weaponText.rectTransform.anchorMin = new Vector2(0f, 1f);
+        weaponText.rectTransform.anchorMax = new Vector2(1f, 1f);
+        weaponText.rectTransform.pivot = new Vector2(1f, 1f);
+        weaponText.rectTransform.sizeDelta = new Vector2(0f, 22f);
+        weaponText.color = new Color(1f, 1f, 1f, 0.7f);
+        weaponText.characterSpacing = 6f;
+
+        roundsText = NewText(template, "Rounds", 40f, TextAlignmentOptions.TopRight, panel);
+        roundsText.rectTransform.anchorMin = new Vector2(0f, 1f);
+        roundsText.rectTransform.anchorMax = new Vector2(1f, 1f);
+        roundsText.rectTransform.pivot = new Vector2(1f, 1f);
+        roundsText.rectTransform.anchoredPosition = new Vector2(0f, -20f);
+        roundsText.rectTransform.sizeDelta = new Vector2(0f, 46f);
+        roundsText.fontStyle = FontStyles.Bold;
+
+        grenadeText = NewText(template, "Grenades", 18f, TextAlignmentOptions.TopRight, panel);
+        grenadeText.rectTransform.anchorMin = new Vector2(0f, 1f);
+        grenadeText.rectTransform.anchorMax = new Vector2(1f, 1f);
+        grenadeText.rectTransform.pivot = new Vector2(1f, 1f);
+        grenadeText.rectTransform.anchoredPosition = new Vector2(0f, -66f);
+        grenadeText.rectTransform.sizeDelta = new Vector2(0f, 22f);
+        grenadeText.color = new Color(0.75f, 0.9f, 0.55f, 1f);
+    }
+
+    // full-screen card shown behind the scene's restart prompt when the player dies
+    void BuildResultsCard(TMP_Text template)
+    {
+        RectTransform card = NewRect("Results", root);
+        Stretch(card);
+        Image dim = card.gameObject.AddComponent<Image>();
+        dim.sprite = GameFX.WhiteSprite;
+        dim.color = new Color(0.05f, 0f, 0f, 0.72f);
+        dim.raycastTarget = false;
+        resultsGroup = card.gameObject.AddComponent<CanvasGroup>();
+        resultsGroup.alpha = 0f;
+        resultsGroup.blocksRaycasts = false;
+        resultsGroup.interactable = false;
+
+        resultsTitle = NewText(template, "Title", 64f, TextAlignmentOptions.Bottom, card);
+        resultsTitle.rectTransform.anchorMin = new Vector2(0f, 0.72f);
+        resultsTitle.rectTransform.anchorMax = new Vector2(1f, 0.82f);
+        resultsTitle.rectTransform.offsetMin = resultsTitle.rectTransform.offsetMax = Vector2.zero;
+        resultsTitle.fontStyle = FontStyles.Bold;
+        resultsTitle.characterSpacing = 8f;
+
+        resultsBody = NewText(template, "Body", 26f, TextAlignmentOptions.Top, card);
+        resultsBody.rectTransform.anchorMin = new Vector2(0.1f, 0.54f);
+        resultsBody.rectTransform.anchorMax = new Vector2(0.9f, 0.71f);
+        resultsBody.rectTransform.offsetMin = resultsBody.rectTransform.offsetMax = Vector2.zero;
+        resultsBody.lineSpacing = 12f;
     }
 
     void Update()
@@ -133,11 +293,141 @@ public class GameHUD : MonoBehaviour
         vignette.color = new Color(0.6f, 0f, 0f, Mathf.Clamp01(Mathf.Max(damageAlpha, pulse)));
 
         crosshairPunch = Mathf.MoveTowards(crosshairPunch, 0f, Time.deltaTime * 4f);
-        crosshair.localScale = Vector3.one * (1f + crosshairPunch * 0.6f);
-        crosshairImage.color = Color.Lerp(new Color(1f, 1f, 1f, 0.85f), crosshairFlashColor, crosshairPunch);
+        crosshair.localScale = Vector3.one * (1f + crosshairPunch * 0.6f) * (aimOnTarget ? 0.85f : 1f);
+        Color restColor = aimOnTarget ? AimOnTarget : new Color(1f, 1f, 1f, 0.85f);
+        crosshairImage.color = Color.Lerp(restColor, crosshairFlashColor, crosshairPunch);
 
         shakeAmount = Mathf.MoveTowards(shakeAmount, 0f, Time.deltaTime * 30f);
         root.anchoredPosition = shakeAmount > 0f ? Random.insideUnitCircle * shakeAmount : Vector2.zero;
+
+        UpdateHealthBar();
+        UpdateCallout();
+        UpdateDamageNumbers();
+    }
+
+    void UpdateHealthBar()
+    {
+        // the fill eases quickly, the ghost lingers then drains so each hit is visible
+        healthShown = Mathf.MoveTowards(healthShown, healthTarget, Time.deltaTime * 2.5f);
+        if (healthGhostShown < healthShown) healthGhostShown = healthShown;
+        else if (Time.time > healthGhostHoldUntil) healthGhostShown = Mathf.MoveTowards(healthGhostShown, healthShown, Time.deltaTime * 0.6f);
+
+        healthFill.fillAmount = healthShown;
+        healthGhost.fillAmount = healthGhostShown;
+        Color color = Color.Lerp(HealthLow, HealthHigh, Mathf.InverseLerp(0.2f, 0.7f, healthShown));
+        // the bar throbs once health is critical
+        if (healthShown < 0.25f) color = Color.Lerp(color, Color.white, 0.35f * (0.5f + 0.5f * Mathf.Sin(Time.time * 10f)));
+        healthFill.color = color;
+    }
+
+    void UpdateCallout()
+    {
+        float age = Time.time - calloutStart;
+        float pop = Mathf.Clamp01(age / 0.15f);
+        calloutText.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.4f, 1f, pop);
+        float alpha = Time.time < calloutUntil ? 1f : Mathf.Clamp01(1f - (Time.time - calloutUntil) / 0.3f);
+        calloutText.alpha = alpha;
+    }
+
+    void UpdateDamageNumbers()
+    {
+        Camera view = Camera.main;
+        Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+
+        foreach (DamageNumber number in damageNumbers)
+        {
+            if (!number.text.gameObject.activeSelf) continue;
+
+            float age = (Time.time - number.startTime) / DamageNumberLife;
+            Vector3 screen = view != null ? view.WorldToScreenPoint(number.worldPosition) : Vector3.back;
+            if (age >= 1f || screen.z <= 0f)
+            {
+                number.text.gameObject.SetActive(false);
+                continue;
+            }
+
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screen, uiCamera, out Vector2 local);
+            // drift up, pop in, fade out
+            number.text.rectTransform.anchoredPosition = local + new Vector2(0f, 30f + age * 70f);
+            number.text.rectTransform.localScale = Vector3.one * number.scale * (age < 0.15f ? Mathf.Lerp(1.6f, 1f, age / 0.15f) : 1f);
+            number.text.alpha = age < 0.6f ? 1f : 1f - (age - 0.6f) / 0.4f;
+        }
+    }
+
+    public void SetHealth(float current, float max)
+    {
+        float fraction = max > 0f ? Mathf.Clamp01(current / max) : 0f;
+        if (fraction < healthTarget) healthGhostHoldUntil = Time.time + 0.4f;
+        healthTarget = fraction;
+        int value = Mathf.CeilToInt(Mathf.Max(current, 0f));
+        if (value != healthShownValue)
+        {
+            healthShownValue = value;
+            healthValue.text = "HEALTH  <color=#FFFFFF><b>" + value + "</b></color>";
+        }
+    }
+
+    public void SetAmmo(string weapon, string rounds, Color color, int grenades)
+    {
+        weaponText.text = weapon;
+        roundsText.text = rounds;
+        roundsText.color = color;
+        grenadeText.text = grenades > 0 ? "GRENADES  " + grenades : "<color=#777777>NO GRENADES</color>";
+    }
+
+    public void Callout(string message, Color color, float duration = 1.2f)
+    {
+        calloutText.text = message;
+        calloutText.color = color;
+        calloutStart = Time.time;
+        calloutUntil = Time.time + duration;
+    }
+
+    public void ShowDamageNumber(Vector3 worldPosition, float damage, bool headshot, bool kill)
+    {
+        DamageNumber number = damageNumbers[nextDamageNumber];
+        nextDamageNumber = (nextDamageNumber + 1) % damageNumbers.Count;
+
+        // a little sideways jitter so a burst of hits doesn't stack into one number
+        number.worldPosition = worldPosition + Random.insideUnitSphere * 0.08f;
+        number.startTime = Time.time;
+        number.scale = kill ? 1.35f : headshot ? 1.15f : 1f;
+        number.text.text = Mathf.RoundToInt(damage).ToString();
+        number.text.color = headshot ? new Color(1f, 0.85f, 0.15f) : kill ? new Color(1f, 0.35f, 0.25f) : Color.white;
+        number.text.gameObject.SetActive(true);
+    }
+
+    public void SetAimOnTarget(bool onTarget)
+    {
+        aimOnTarget = onTarget;
+    }
+
+    public void ShowResults(string title, Color titleColor, string body)
+    {
+        resultsTitle.text = title;
+        resultsTitle.color = titleColor;
+        resultsBody.text = body;
+        if (resultsRoutine != null) StopCoroutine(resultsRoutine);
+        resultsRoutine = StartCoroutine(FadeResults(1f));
+    }
+
+    public void HideResults()
+    {
+        if (resultsRoutine != null) StopCoroutine(resultsRoutine);
+        resultsGroup.alpha = 0f;
+    }
+
+    IEnumerator FadeResults(float target)
+    {
+        float start = resultsGroup.alpha;
+        for (float t = 0f; t < 0.6f; t += Time.deltaTime)
+        {
+            resultsGroup.alpha = Mathf.Lerp(start, target, t / 0.6f);
+            resultsTitle.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.25f, 1f, t / 0.6f);
+            yield return null;
+        }
+        resultsGroup.alpha = target;
+        resultsTitle.rectTransform.localScale = Vector3.one;
     }
 
     public void FlashDamage(float strength = 0.5f)
@@ -287,6 +577,24 @@ public class GameHUD : MonoBehaviour
         return image;
     }
 
+    RectTransform NewRect(string name, RectTransform parent)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform));
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        return rect;
+    }
+
+    Image NewFill(string name, RectTransform parent, Color color)
+    {
+        Image fill = NewImage(name, GameFX.WhiteSprite, parent);
+        Stretch(fill.rectTransform);
+        fill.type = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.color = color;
+        return fill;
+    }
+
     RawImage NewRawImage(string name, Texture texture)
     {
         GameObject go = new GameObject(name, typeof(RectTransform));
@@ -302,6 +610,8 @@ public class GameHUD : MonoBehaviour
         // clone an existing label so the HUD keeps the scene's font and style
         TMP_Text text = Instantiate(template, parent, false);
         text.name = name;
+        // the template's pivot is on its left edge; centre it so positions and scale pops are symmetric
+        text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
         text.text = string.Empty;
         text.fontSize = size;
         text.enableAutoSizing = false;

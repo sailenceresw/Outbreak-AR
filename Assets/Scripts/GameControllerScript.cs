@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.XR.ARFoundation;
 using TMPro;
 
 public class GameControllerScript : MonoBehaviour
@@ -19,6 +20,8 @@ public class GameControllerScript : MonoBehaviour
     static int carriedScore;
     static int carriedAmmo;
     static int carriedShells;
+    static int carriedGrenades;
+    static int carriedKills, carriedShotsFired, carriedShotsHit;
     static bool continuingChapter;
     // level picked in the level select that lives in another scene
     static int pendingStartLevel = -1;
@@ -54,6 +57,9 @@ public class GameControllerScript : MonoBehaviour
     public float maxPlayerHealth = 100f;
     public float healBetweenLevels = 25f;
     public Vector2 spawnDistanceRange = new Vector2(4f, 5f);
+    // the first levels only spawn within this many degrees of where the player faces
+    public int frontSpawnLevels = 2;
+    public float frontSpawnHalfAngle = 60f;
 
     [Header("Shooting")]
     public float bulletSpeed = 40f;
@@ -77,10 +83,23 @@ public class GameControllerScript : MonoBehaviour
     public int startingShells = 6;
     public int shellsPerCrate = 3;
 
+    [Header("Grenades")]
+    // topped up to this many at the start of each level
+    public int grenadesPerLevel = 2;
+    public int maxGrenades = 5;
+    public float grenadeRadius = 2.6f;
+    // full damage at the centre, falling to 35% at the edge of the blast
+    public float grenadeDamage = 320f;
+    public float grenadeFlightTime = 0.75f;
+    public Vector2 grenadeThrowRange = new Vector2(1.5f, 9f);
+
     [Header("Pickups")]
     public float pickupSpawnInterval = 20f;
     public float pickupLifetime = 20f;
     public int lowAmmoThreshold = 5;
+    // below this many pistol rounds, a reserve round trickles in so the player is never defenceless
+    public int reserveAmmoCap = 3;
+    public float reserveAmmoInterval = 2f;
     public float powerUpDropChance = 0.08f;
     public float bruteDropChance = 0.35f;
 
@@ -90,6 +109,7 @@ public class GameControllerScript : MonoBehaviour
     public GameState State { get; private set; } = GameState.Intro;
     public int AmmoCount { get; private set; }
     public int ShellCount { get; private set; }
+    public int GrenadeCount { get; private set; }
     public WeaponType CurrentWeapon { get; private set; } = WeaponType.Pistol;
     public float PlayerHealth { get; private set; }
     public int ZombiesKilled { get; private set; }
@@ -126,7 +146,15 @@ public class GameControllerScript : MonoBehaviour
     bool levelChosen;
     bool shotgunUnlocked;
     GameObject swapButton;
+    GameObject grenadeButton;
+    TMP_Text grenadeButtonLabel;
+    float nextGrenadeTime;
     GameObject activeAmmoPickup;
+
+    // stats for the end-of-run card
+    int runKills;
+    int shotsFired;
+    int shotsHit;
 
     // combat
     float nextFireTime;
@@ -136,8 +164,14 @@ public class GameControllerScript : MonoBehaviour
     float hollowPointsUntil;
     float cryoUntil;
 
+    // detected floor planes are drawn while scanning and hidden during fights
+    ARPlaneManager planeManager;
+    bool planesVisible = true;
+    readonly List<Renderer> planeRenderers = new List<Renderer>();
+
     // feedback
     float infoMessageUntil;
+    float nextReserveRoundTime;
     float nextHapticTime;
     float nextHeartbeatTime;
     float baseMusicVolume = 0.7f;
@@ -164,6 +198,29 @@ public class GameControllerScript : MonoBehaviour
         {
             baseMusicVolume = musicSource.volume;
         }
+        planeManager = FindObjectOfType<ARPlaneManager>();
+    }
+
+    void LateUpdate()
+    {
+        // new planes keep being detected mid-fight, so re-hide every frame while hidden
+        if (!planesVisible) ApplyPlaneVisibility();
+    }
+
+    void SetPlanesVisible(bool visible)
+    {
+        planesVisible = visible;
+        ApplyPlaneVisibility();
+    }
+
+    void ApplyPlaneVisibility()
+    {
+        if (planeManager == null) return;
+        foreach (ARPlane plane in planeManager.trackables)
+        {
+            plane.GetComponentsInChildren(true, planeRenderers);
+            foreach (Renderer r in planeRenderers) r.enabled = planesVisible;
+        }
     }
 
     void OnDestroy()
@@ -181,6 +238,10 @@ public class GameControllerScript : MonoBehaviour
             Score = carriedScore;
             AmmoCount = Mathf.Max(carriedAmmo, startingAmmo);
             ShellCount = carriedShells;
+            GrenadeCount = carriedGrenades;
+            runKills = carriedKills;
+            shotsFired = carriedShotsFired;
+            shotsHit = carriedShotsHit;
             shotgunUnlocked = startLevelIndex > LevelCatalog.ShotgunUnlockLevel;
         }
         else
@@ -200,6 +261,7 @@ public class GameControllerScript : MonoBehaviour
         State = skipGreeting ? GameState.Scanning : GameState.Intro;
 
         CreateSwapButton();
+        CreateGrenadeButton();
         SetActiveSafe(shootButton, false);
         SetActiveSafe(greetingPrompt, !skipGreeting);
         SetActiveSafe(scanPrompt, skipGreeting);
@@ -212,6 +274,11 @@ public class GameControllerScript : MonoBehaviour
         {
             hud = GameHUD.Create(playerHealthText.canvas.rootCanvas, playerHealthText);
             hud.SetCrosshairVisible(false);
+
+            // the HUD's health and ammo panels replace the scene's plain labels; the labels stay
+            // in place because the HUD and level select clone them for their font
+            playerHealthText.text = string.Empty;
+            if (ammoCountText != null) ammoCountText.text = string.Empty;
         }
         RefreshHud();
 
@@ -228,8 +295,10 @@ public class GameControllerScript : MonoBehaviour
             UpdateSpawning();
             UpdateHorde();
             UpdatePickups();
+            UpdateReserveAmmo();
             UpdateObjective();
         }
+        UpdateAim();
 
         if (combo > 0 && Time.time - lastKillTime > ComboWindow) combo = 0;
 
@@ -245,6 +314,7 @@ public class GameControllerScript : MonoBehaviour
         currentLevelIndex = index;
         level = LevelCatalog.Get(index);
         State = GameState.LevelIntro;
+        SetPlanesVisible(false);
 
         if (!isRetry && level.bonusAmmo > 0 && index != startLevelIndex)
         {
@@ -259,6 +329,8 @@ public class GameControllerScript : MonoBehaviour
             newWeapon = true;
         }
         SetActiveSafe(swapButton, shotgunUnlocked);
+        GrenadeCount = Mathf.Max(GrenadeCount, grenadesPerLevel);
+        SetActiveSafe(grenadeButton, true);
         GameProgress.Unlock(index);
 
         levelStartScore = Score;
@@ -413,6 +485,10 @@ public class GameControllerScript : MonoBehaviour
             carriedScore = Score;
             carriedAmmo = AmmoCount;
             carriedShells = ShellCount;
+            carriedGrenades = GrenadeCount;
+            carriedKills = runKills;
+            carriedShotsFired = shotsFired;
+            carriedShotsHit = shotsHit;
             continuingChapter = true;
             GameProgress.SubmitHighScore(Score);
             if (hud != null) hud.ShowBanner("CHAPTER COMPLETE", "The night is only getting darker...", 0f);
@@ -431,12 +507,14 @@ public class GameControllerScript : MonoBehaviour
         bool newHighScore = GameProgress.SubmitHighScore(Score);
         SetActiveSafe(shootButton, false);
         SetActiveSafe(swapButton, false);
+        SetActiveSafe(grenadeButton, false);
         if (hud != null)
         {
             hud.SetCrosshairVisible(false);
             hud.ShowBanner("YOU SURVIVED THE OUTBREAK",
                 "Final score  " + Score.ToString("N0") +
-                (newHighScore ? "\n<color=#FFC832>NEW HIGH SCORE!</color>" : "\nBest  " + GameProgress.HighScore.ToString("N0")), 0f);
+                (newHighScore ? "\n<color=#FFC832>NEW HIGH SCORE!</color>" : "\nBest  " + GameProgress.HighScore.ToString("N0")) +
+                "\n<color=#BBBBBB>" + runKills + " kills   " + AccuracyPercent() + "% accuracy</color>", 0f);
         }
         GameAudio.Play(GameAudio.Fanfare, 1f, 0.8f);
 
@@ -455,9 +533,10 @@ public class GameControllerScript : MonoBehaviour
     void Lose()
     {
         State = GameState.Lost;
-        GameProgress.SubmitHighScore(Score);
+        bool newHighScore = GameProgress.SubmitHighScore(Score);
         SetActiveSafe(shootButton, false);
         SetActiveSafe(swapButton, false);
+        SetActiveSafe(grenadeButton, false);
         SetActiveSafe(gun, false);
         SetActiveSafe(youLostPrompt, true);
         if (hud != null)
@@ -465,7 +544,16 @@ public class GameControllerScript : MonoBehaviour
             hud.HideBoss();
             hud.HideBanner();
             hud.SetCrosshairVisible(false);
-            hud.SetObjective("Fell on level " + (currentLevelIndex + 1) + "   Score " + Score.ToString("N0"));
+            hud.SetObjective(string.Empty);
+            // the results card replaces the prompt's own text, which is hard to read over the camera
+            SetPromptTextVisible(youLostPrompt, false);
+            hud.ShowResults("YOU DIED", new Color(0.95f, 0.15f, 0.1f),
+                "Fell on level " + (currentLevelIndex + 1) + ": " + level.title +
+                "\n\n<color=#BBBBBB>Kills</color>  " + runKills +
+                "     <color=#BBBBBB>Accuracy</color>  " + AccuracyPercent() + "%" +
+                "\n<color=#BBBBBB>Score</color>  " + Score.ToString("N0") +
+                (newHighScore ? "     <color=#FFC832>NEW BEST!</color>" : "     <color=#BBBBBB>Best</color>  " + GameProgress.HighScore.ToString("N0")) +
+                "\n\n<size=80%><color=#999999>Tap Restart to retry this level</color></size>");
         }
         foreach (ZombieController zombie in aliveZombies)
         {
@@ -496,7 +584,27 @@ public class GameControllerScript : MonoBehaviour
         SetActiveSafe(youLostPrompt, false);
         SetActiveSafe(gun, true);
         SetActiveSafe(shootButton, true);
+        if (hud != null) hud.HideResults();
         StartCoroutine(BeginLevel(currentLevelIndex, true));
+    }
+
+    int AccuracyPercent()
+    {
+        return shotsFired > 0 ? Mathf.RoundToInt(100f * shotsHit / shotsFired) : 0;
+    }
+
+    // hide a prompt's labels but keep its buttons (and their labels) visible
+    static void SetPromptTextVisible(GameObject prompt, bool visible)
+    {
+        if (prompt == null) return;
+        foreach (TMP_Text text in prompt.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (text.GetComponentInParent<Button>() == null) text.enabled = visible;
+        }
+        foreach (Text text in prompt.GetComponentsInChildren<Text>(true))
+        {
+            if (text.GetComponentInParent<Button>() == null) text.enabled = visible;
+        }
     }
 
     // starting loadout for a fresh run from the given level
@@ -507,7 +615,9 @@ public class GameControllerScript : MonoBehaviour
         // the shotgun is announced on its unlock level, later starts already have it
         shotgunUnlocked = levelIndex > LevelCatalog.ShotgunUnlockLevel;
         ShellCount = shotgunUnlocked ? startingShells : 0;
+        GrenadeCount = 0;
         CurrentWeapon = WeaponType.Pistol;
+        runKills = shotsFired = shotsHit = 0;
     }
 
     // ---------- Spawning ----------
@@ -525,8 +635,18 @@ public class GameControllerScript : MonoBehaviour
         if (aliveZombies.Count >= maxAlive) return;
         if (level.objective != LevelObjective.Survive && zombiesSpawned >= level.zombieCount) return;
 
-        SpawnZombie(RollZombieType(), RingPosition(Random.Range(0f, Mathf.PI * 2f)), true);
+        SpawnZombie(RollZombieType(), RingPosition(SpawnAngle()), true);
         nextSpawnTime = Time.time + Random.Range(level.spawnInterval.x, level.spawnInterval.y);
+    }
+
+    // early levels spawn in front so new players see what's attacking them; later levels surround
+    float SpawnAngle()
+    {
+        if (currentLevelIndex >= frontSpawnLevels || mainCamera == null) return Random.Range(0f, Mathf.PI * 2f);
+
+        Vector3 forward = mainCamera.transform.forward;
+        float facing = Mathf.Atan2(forward.z, forward.x);
+        return facing + Random.Range(-frontSpawnHalfAngle, frontSpawnHalfAngle) * Mathf.Deg2Rad;
     }
 
     ZombieType RollZombieType()
@@ -654,11 +774,12 @@ public class GameControllerScript : MonoBehaviour
         if (State != GameState.Playing) return;
 
         ZombiesKilled++;
+        runKills++;
 
         combo = Time.time - lastKillTime <= ComboWindow ? Mathf.Min(combo + 1, MaxCombo) : 1;
         lastKillTime = Time.time;
         AddScore(zombie.ScoreValue * combo);
-        if (combo >= 3) ShowMessage(combo + "x COMBO!");
+        if (combo >= 3) ShowMessage(combo + "x COMBO!", 1.5f, new Color(1f, 0.55f, 0.15f));
 
         float dropChance = zombie.Type == ZombieType.Brute ? bruteDropChance : powerUpDropChance;
         if (!zombie.IsBoss && Random.value < dropChance)
@@ -717,19 +838,36 @@ public class GameControllerScript : MonoBehaviour
         return pickup;
     }
 
+    void UpdateReserveAmmo()
+    {
+        if (AmmoCount >= reserveAmmoCap)
+        {
+            nextReserveRoundTime = Time.time + reserveAmmoInterval;
+            return;
+        }
+        if (Time.time < nextReserveRoundTime) return;
+
+        AmmoCount++;
+        nextReserveRoundTime = Time.time + reserveAmmoInterval;
+    }
+
     public void AddAmmo(int amount)
     {
         AmmoCount += amount;
         GameAudio.Play(GameAudio.Pickup, 0.7f);
+
+        string message = "+" + amount + " ammo";
         if (shotgunUnlocked)
         {
             ShellCount += shellsPerCrate;
-            ShowMessage("+" + amount + " ammo  +" + shellsPerCrate + " shells");
+            message += "  +" + shellsPerCrate + " shells";
         }
-        else
+        if (GrenadeCount < maxGrenades)
         {
-            ShowMessage("+" + amount + " ammo");
+            GrenadeCount++;
+            message += "  +1 grenade";
         }
+        ShowMessage(message);
     }
 
     public void AddHealth(float amount)
@@ -796,13 +934,18 @@ public class GameControllerScript : MonoBehaviour
 
         if ((shotgun ? ShellCount : AmmoCount) <= 0 && !rapidFire)
         {
+            if (shotgun)
+            {
+                SwapToPistol("Out of shells! Pistol ready");
+                return;
+            }
             // dry fire can still grab a pickup, otherwise the player could soft-lock with no ammo
             if (CastShot(ray, maxShotDistance, out RaycastHit pickupHit))
             {
                 TryCollectPickup(pickupHit.collider);
             }
             GameAudio.Play(GameAudio.DryFire, 0.8f);
-            ShowMessage(shotgun ? "Out of shells! Tap SWAP" : "Out of ammo! Find an ammo crate");
+            ShowMessage("Out of ammo! Reserve rounds incoming");
             return;
         }
 
@@ -830,20 +973,37 @@ public class GameControllerScript : MonoBehaviour
             : cameraTransform.position + cameraTransform.forward * 0.4f;
         GameFX.MuzzleFlash(muzzle, cameraTransform.forward, shotgun);
 
+        bool hitZombie;
         if (shotgun)
         {
-            FireShotgun(cameraTransform, ray);
+            hitZombie = FireShotgun(cameraTransform, ray);
             if (hud != null) hud.Shake(5f);
         }
         else
         {
-            FirePistol(cameraTransform, ray);
+            hitZombie = FirePistol(cameraTransform, ray);
         }
+
+        shotsFired++;
+        if (hitZombie) shotsHit++;
+
+        // don't leave the player holding an empty shotgun
+        if (shotgun && !rapidFire && ShellCount <= 0) SwapToPistol("Out of shells! Pistol ready");
+    }
+
+    void SwapToPistol(string message)
+    {
+        CurrentWeapon = WeaponType.Pistol;
+        nextFireTime = Mathf.Max(nextFireTime, Time.time + 0.25f);
+        GameAudio.Play(GameAudio.DryFire, 0.9f, 1.2f);
+        if (hud != null) hud.SetCrosshairWide(false);
+        ShowMessage(message, 1.5f, new Color(1f, 0.6f, 0.1f));
     }
 
     // hitscan so fast bullets can't tunnel through zombies; the bullet prefab is only a tracer
-    void FirePistol(Transform cameraTransform, Ray ray)
+    bool FirePistol(Transform cameraTransform, Ray ray)
     {
+        bool hitZombie = false;
         Vector3 endPoint = ray.GetPoint(maxShotDistance);
         if (CastShot(ray, maxShotDistance, out RaycastHit hit))
         {
@@ -854,6 +1014,7 @@ public class GameControllerScript : MonoBehaviour
                 bool headshot = zombie.IsHeadshot(hit.point);
                 float damage = bulletDamage * (headshot ? headshotMultiplier : 1f) * DamageBoost();
                 ApplyHit(zombie, damage, hit.point, ray.direction, headshot);
+                hitZombie = true;
             }
             else
             {
@@ -862,10 +1023,11 @@ public class GameControllerScript : MonoBehaviour
         }
 
         SpawnTracer(cameraTransform, endPoint);
+        return hitZombie;
     }
 
     // a cone of pellets; damage on each zombie is added up and applied once
-    void FireShotgun(Transform cameraTransform, Ray ray)
+    bool FireShotgun(Transform cameraTransform, Ray ray)
     {
         Dictionary<ZombieController, float> damageByZombie = new Dictionary<ZombieController, float>();
         Dictionary<ZombieController, Vector3> hitPoints = new Dictionary<ZombieController, Vector3>();
@@ -908,6 +1070,7 @@ public class GameControllerScript : MonoBehaviour
             if (entry.Key == null) continue;
             ApplyHit(entry.Key, entry.Value, hitPoints[entry.Key], ray.direction, headshots.Contains(entry.Key));
         }
+        return damageByZombie.Count > 0;
     }
 
     float DamageBoost()
@@ -921,12 +1084,16 @@ public class GameControllerScript : MonoBehaviour
 
         GameFX.Blood(point, -direction + Vector3.up * 0.3f, headshot);
         GameAudio.Play(killed ? GameAudio.KillMarker : GameAudio.HitMarker, 0.5f);
-        if (hud != null) hud.HitMarker(killed, headshot);
+        if (hud != null)
+        {
+            hud.HitMarker(killed, headshot);
+            hud.ShowDamageNumber(point, damage, headshot, killed);
+        }
 
         if (headshot)
         {
             if (killed) AddScore(50 * Mathf.Max(combo, 1));
-            ShowMessage(killed ? "HEADSHOT!" : "Headshot!");
+            ShowMessage(killed ? "HEADSHOT!" : "Headshot!", 1.2f, new Color(1f, 0.85f, 0.15f));
         }
     }
 
@@ -944,6 +1111,108 @@ public class GameControllerScript : MonoBehaviour
         if (hud != null) hud.SetCrosshairWide(shotgun);
         if (gunTransform != null) gunTransform.localRotation = gunRestRotation * Quaternion.Euler(25f, 0f, 0f);
         ShowMessage(shotgun ? "SHOTGUN" : "PISTOL", 1f);
+    }
+
+    public void ThrowGrenade()
+    {
+        if (State != GameState.Playing || mainCamera == null) return;
+        if (Time.time < nextGrenadeTime) return;
+        if (GrenadeCount <= 0)
+        {
+            GameAudio.Play(GameAudio.DryFire, 0.8f, 0.8f);
+            ShowMessage("No grenades! Ammo crates carry one");
+            return;
+        }
+
+        GrenadeCount--;
+        nextGrenadeTime = Time.time + 1f;
+
+        Transform cameraTransform = mainCamera.transform;
+        Vector3 from = cameraTransform.position + cameraTransform.forward * 0.3f - cameraTransform.up * 0.1f;
+        GameAudio.Play(GameAudio.Throw, 0.8f);
+        Grenade.Throw(from, GrenadeTarget(cameraTransform), grenadeFlightTime, ExplodeGrenade);
+    }
+
+    // where the view ray meets the floor, kept within throwing range
+    Vector3 GrenadeTarget(Transform cameraTransform)
+    {
+        Vector3 floor = FloorUnderPlayer();
+        Vector3 flatForward = cameraTransform.forward;
+        flatForward.y = 0f;
+        if (flatForward.sqrMagnitude < 0.0001f) flatForward = Vector3.forward;
+        flatForward.Normalize();
+
+        float distance = grenadeThrowRange.y * 0.55f;
+        // only aim at the floor when looking down at it; looking level or up lobs it a fixed distance
+        if (cameraTransform.forward.y < -0.05f)
+        {
+            float rayDistance = (floor.y - cameraTransform.position.y) / cameraTransform.forward.y;
+            Vector3 hit = cameraTransform.position + cameraTransform.forward * rayDistance;
+            Vector3 offset = hit - floor;
+            offset.y = 0f;
+            distance = offset.magnitude;
+        }
+        distance = Mathf.Clamp(distance, grenadeThrowRange.x, grenadeThrowRange.y);
+        return floor + flatForward * distance;
+    }
+
+    void ExplodeGrenade(Vector3 center)
+    {
+        GameFX.Explosion(center);
+        GameAudio.Play(GameAudio.Explosion, 1f, Random.Range(0.9f, 1.05f));
+
+        if (mainCamera != null && hud != null)
+        {
+            // closer blasts shake harder
+            float playerDistance = Vector3.Distance(FloorUnderPlayer(), center);
+            hud.Shake(Mathf.Lerp(18f, 6f, Mathf.InverseLerp(1.5f, 8f, playerDistance)));
+        }
+        if (State != GameState.Playing) return;
+
+        int kills = 0;
+        foreach (ZombieController zombie in aliveZombies.ToArray())
+        {
+            if (zombie == null || zombie.IsDead) continue;
+            Vector3 offset = zombie.transform.position - center;
+            offset.y = 0f;
+            float distance = offset.magnitude;
+            if (distance > grenadeRadius) continue;
+
+            float falloff = Mathf.Lerp(1f, 0.35f, distance / grenadeRadius);
+            float damage = grenadeDamage * falloff * (zombie.IsBoss ? 0.6f : 1f) * DamageBoost();
+            Vector3 direction = distance > 0.01f ? offset / distance : Vector3.forward;
+            bool killed = zombie.TakeDamage(damage, direction);
+            if (killed) kills++;
+
+            Vector3 chest = zombie.transform.position + Vector3.up * 1.2f * zombie.transform.localScale.y;
+            GameFX.Blood(chest, direction + Vector3.up * 0.5f, false);
+            if (hud != null) hud.ShowDamageNumber(chest, damage, false, killed);
+        }
+
+        if (kills >= 2)
+        {
+            AddScore(150 * (kills - 1));
+            ShowMessage(kills >= 4 ? "MASSACRE! x" + kills : "MULTI KILL x" + kills, 1.8f, new Color(1f, 0.55f, 0.15f));
+            GameAudio.Play(GameAudio.KillMarker, 0.8f, 0.8f);
+        }
+    }
+
+    // turn the crosshair red when it's over a zombie
+    void UpdateAim()
+    {
+        if (hud == null) return;
+        bool onTarget = false;
+        if (State == GameState.Playing && mainCamera != null)
+        {
+            Ray ray = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
+            float range = CurrentWeapon == WeaponType.Shotgun ? shotgunRange : maxShotDistance;
+            if (CastShot(ray, range, out RaycastHit hit))
+            {
+                ZombieController zombie = hit.collider.GetComponentInParent<ZombieController>();
+                onTarget = zombie != null && !zombie.IsDead;
+            }
+        }
+        hud.SetAimOnTarget(onTarget);
     }
 
     // nearest hit along the shot, ignoring the gun model and tracers
@@ -1066,6 +1335,7 @@ public class GameControllerScript : MonoBehaviour
         State = GameState.Scanning;
         SetActiveSafe(greetingPrompt, false);
         SetActiveSafe(scanPrompt, true);
+        SetPlanesVisible(true);
     }
 
     public void OnContinueButtonClicked() => OnCOntinueButtonClicked();
@@ -1111,32 +1381,54 @@ public class GameControllerScript : MonoBehaviour
         StartCoroutine(BeginLevel(index, false));
     }
 
-    // a second button next to the shoot button, cloned so it matches the scene's style
+    // bottom-right, switches between pistol and shotgun
     void CreateSwapButton()
     {
-        if (shootButton == null) return;
+        swapButton = CloneShootButton("SwapWeaponButton", SwitchWeapon, new Vector2(1f, 0f),
+            new Vector2(-20f, 20f), new Vector2(150f, 90f), "SWAP", out _);
+    }
 
-        swapButton = Instantiate(shootButton, shootButton.transform.parent);
-        swapButton.name = "SwapWeaponButton";
+    // bottom-left, mirrors the swap button
+    void CreateGrenadeButton()
+    {
+        grenadeButton = CloneShootButton("GrenadeButton", ThrowGrenade, new Vector2(0f, 0f),
+            new Vector2(20f, 20f), new Vector2(190f, 90f), "GRENADE", out grenadeButtonLabel);
+        if (grenadeButton != null)
+        {
+            Image background = grenadeButton.GetComponent<Image>();
+            if (background != null) background.color = new Color(0.32f, 0.42f, 0.2f, background.color.a);
+        }
+    }
 
-        Button button = swapButton.GetComponent<Button>();
+    // extra buttons are cloned from the shoot button so they match the scene's style
+    GameObject CloneShootButton(string name, UnityEngine.Events.UnityAction onClick, Vector2 corner,
+        Vector2 position, Vector2 size, string text, out TMP_Text label)
+    {
+        label = null;
+        if (shootButton == null) return null;
+
+        GameObject clone = Instantiate(shootButton, shootButton.transform.parent);
+        clone.name = name;
+
+        Button button = clone.GetComponent<Button>();
         if (button != null)
         {
             // drop the cloned ShootBullet binding
             button.onClick = new Button.ButtonClickedEvent();
-            button.onClick.AddListener(SwitchWeapon);
+            button.onClick.AddListener(onClick);
         }
 
-        RectTransform rect = swapButton.GetComponent<RectTransform>();
-        rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
-        rect.pivot = new Vector2(1f, 0f);
-        rect.sizeDelta = new Vector2(150f, 90f);
-        rect.anchoredPosition = new Vector2(-20f, 80f);
+        RectTransform rect = clone.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = corner;
+        rect.pivot = corner;
+        rect.sizeDelta = size;
+        rect.anchoredPosition = position;
 
-        TMP_Text label = swapButton.GetComponentInChildren<TMP_Text>(true);
-        if (label != null) label.text = "SWAP";
+        label = clone.GetComponentInChildren<TMP_Text>(true);
+        if (label != null) label.text = text;
 
-        swapButton.SetActive(false);
+        clone.SetActive(false);
+        return clone;
     }
 
     public void OnRestartButtonClicked()
@@ -1151,6 +1443,8 @@ public class GameControllerScript : MonoBehaviour
         carriedScore = 0;
         carriedAmmo = 0;
         carriedShells = 0;
+        carriedGrenades = 0;
+        carriedKills = carriedShotsFired = carriedShotsHit = 0;
         continuingChapter = false;
         SetActiveSafe(youWonPrompt, false);
         StartCoroutine(LoadSceneWithFade(0));
@@ -1158,23 +1452,40 @@ public class GameControllerScript : MonoBehaviour
 
     void RefreshHud()
     {
-        if (ammoCountText != null)
+        bool rapidFire = Time.time < rapidFireUntil;
+        bool shotgun = CurrentWeapon == WeaponType.Shotgun;
+        int rounds = shotgun ? ShellCount : AmmoCount;
+        int lowThreshold = shotgun ? 2 : lowAmmoThreshold;
+        Color roundsColor = rapidFire ? new Color(1f, 0.85f, 0.1f)
+            : rounds <= 0 ? new Color(1f, 0.25f, 0.2f)
+            : rounds <= lowThreshold ? new Color(1f, 0.6f, 0.1f)
+            : Color.white;
+        string roundsLabel = rapidFire ? "RAPID" : rounds.ToString();
+
+        if (hud != null)
         {
-            bool rapidFire = Time.time < rapidFireUntil;
-            bool shotgun = CurrentWeapon == WeaponType.Shotgun;
-            int rounds = shotgun ? ShellCount : AmmoCount;
-            int lowThreshold = shotgun ? 2 : lowAmmoThreshold;
-            string label = shotgun ? "Shells: " : "Ammo: ";
-            ammoCountText.text = label + (rapidFire ? "RAPID" : rounds.ToString());
-            ammoCountText.color = rapidFire ? new Color(1f, 0.85f, 0.1f)
-                : rounds <= lowThreshold ? new Color(1f, 0.6f, 0.1f)
-                : Color.white;
+            hud.SetHealth(PlayerHealth, maxPlayerHealth);
+            hud.SetAmmo(shotgun ? "SHOTGUN  SHELLS" : "PISTOL  AMMO", roundsLabel, roundsColor, GrenadeCount);
+        }
+        else
+        {
+            // no HUD: fall back to the scene's plain labels
+            if (ammoCountText != null)
+            {
+                ammoCountText.text = (shotgun ? "Shells: " : "Ammo: ") + roundsLabel;
+                ammoCountText.color = roundsColor;
+            }
+            if (playerHealthText != null)
+            {
+                playerHealthText.text = "Health: " + Mathf.CeilToInt(PlayerHealth);
+                playerHealthText.color = Color.Lerp(Color.red, Color.white, PlayerHealth / (maxPlayerHealth * 0.5f));
+            }
         }
 
-        if (playerHealthText != null)
+        if (grenadeButtonLabel != null)
         {
-            playerHealthText.text = "Health: " + Mathf.CeilToInt(PlayerHealth);
-            playerHealthText.color = Color.Lerp(Color.red, Color.white, PlayerHealth / (maxPlayerHealth * 0.5f));
+            grenadeButtonLabel.text = "GRENADE  " + GrenadeCount;
+            grenadeButtonLabel.alpha = GrenadeCount > 0 ? 1f : 0.45f;
         }
 
         if (infoText != null && Time.time >= infoMessageUntil)
@@ -1192,6 +1503,16 @@ public class GameControllerScript : MonoBehaviour
 
     void ShowMessage(string message, float duration = 1.5f)
     {
+        ShowMessage(message, duration, Color.white);
+    }
+
+    void ShowMessage(string message, float duration, Color color)
+    {
+        if (hud != null)
+        {
+            hud.Callout(message, color, duration);
+            return;
+        }
         if (infoText == null) return;
         infoText.text = message;
         infoMessageUntil = Time.time + duration;

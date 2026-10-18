@@ -378,6 +378,7 @@ public class ZombieController : MonoBehaviour
         PlayAnim(hitFromFront ? DieBackState : DieForwardState);
 
         if (IsBoss) GameFX.Dust(transform.position, 3f);
+        GameFX.BloodPool(transform.position, transform.localScale.x);
 
         if (GameControllerScript.Instance != null)
         {

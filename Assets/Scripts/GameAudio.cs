@@ -10,7 +10,7 @@ public static class GameAudio
     static AudioSource source;
     static readonly System.Random noiseRandom = new System.Random(1234);
 
-    static AudioClip heartbeat, hitMarker, killMarker, dryFire, pickup, powerUp, siren, fanfare, impact;
+    static AudioClip heartbeat, hitMarker, killMarker, dryFire, pickup, powerUp, siren, fanfare, impact, explosion, throwWhoosh;
 
     public static AudioClip Heartbeat => heartbeat != null ? heartbeat : heartbeat = Build("Heartbeat", 0.55f, t =>
         Thump(t) + 0.7f * Thump(t - 0.2f));
@@ -50,6 +50,17 @@ public static class GameAudio
         Mathf.Sin(TwoPi * 42f * t) * Mathf.Exp(-t * 1.8f)
         + Mathf.Sin(TwoPi * 63f * t) * Mathf.Exp(-t * 2.5f) * 0.5f
         + Noise() * Mathf.Exp(-t * 7f) * 0.35f);
+
+    // sharp crack followed by a low rumble
+    public static AudioClip Explosion => explosion != null ? explosion : explosion = Build("Explosion", 1.8f, t =>
+        Noise() * Mathf.Exp(-t * 9f)
+        + Noise() * Mathf.Exp(-t * 2.2f) * 0.45f
+        + Mathf.Sin(TwoPi * (38f - 12f * t) * t) * Mathf.Exp(-t * 2.5f) * 0.9f);
+
+    // pin click, then air rushing past
+    public static AudioClip Throw => throwWhoosh != null ? throwWhoosh : throwWhoosh = Build("Throw", 0.45f, t =>
+        Mathf.Sin(TwoPi * 2400f * t) * Mathf.Exp(-t * 160f) * 0.6f
+        + Noise() * Mathf.Sin(Mathf.PI * Mathf.Clamp01((t - 0.05f) / 0.4f)) * 0.5f);
 
     public static void Play(AudioClip clip, float volume = 1f, float pitch = 1f)
     {

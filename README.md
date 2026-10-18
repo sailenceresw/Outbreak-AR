@@ -5,7 +5,7 @@ An augmented-reality zombie survival shooter for Android and iOS, built with Uni
 Scan your room, then hold off waves of zombies that claw up out of the floor around you. Turn to find them and shoot to survive.
 
 <p align="center">
-  <img src="docs/android-gameplay.png" alt="Outbreak AR running on a Redmi Note 10 Pro: a zombie up close over the camera feed, with the health, score and ammo HUD and the death screen" width="300">
+  <img src="docs/android-gameplay.png" alt="Outbreak AR running on a Redmi Note 10 Pro: a runner zombie charging at the camera with the red on-target crosshair, health bar, score, shotgun shells, and the grenade and swap buttons" width="300">
 </p>
 <p align="center"><em>Running on a Redmi Note 10 Pro (Android 13).</em></p>
 
@@ -29,6 +29,9 @@ Chapter 1 runs in `Level1.unity` and Chapter 2 in `Level2.unity`. Levels within 
 - **Enemies:** Walkers, fast Runners, armoured Brutes and bosses that summon reinforcements and enrage at half health.
 - **Combat:** hitscan shooting with headshots, combo multipliers and a saved high score.
 - **Two weapons:** pistol and a pump shotgun, unlocked on level 2. The shotgun fires 8 pellets, does more damage up close and uses shells. Tap SWAP to switch.
+- **Grenades:** two per level, plus one from each ammo crate. Aim at the floor and tap GRENADE to lob one; the blast hits every zombie nearby, with a bonus for multi-kills.
+- **Combat feedback:** floating damage numbers (gold for headshots), a crosshair that turns red over a target, blood pools where zombies fall, and an end-of-run card with kills, accuracy and score.
+- **HUD:** health bar that shows each hit, ammo and grenade panel, and a dark backing so it stays readable over any camera image.
 - **Level select:** progress is saved on the device. Returning players can start from any unlocked level and see their best score for each.
 - **Power-ups:** Rapid Fire, Hollow Points, Cryo Pulse and Shockwave.
 - **Supply drops:** ammo crates and med kits. Shoot them or walk up to them to collect.
@@ -65,7 +68,8 @@ The APK is written to `Builds/Android/OutbreakAR.apk`.
 | `ZombieController` | Zombie types, movement, attacks, boss behaviour |
 | `LevelCatalog` | Level definitions and saved progress (`GameProgress`) |
 | `LevelSelectMenu` | Runtime level picker |
-| `GameHUD` | Crosshair, threat arrows, boss bar, banners |
+| `GameHUD` | Health and ammo panels, crosshair, threat arrows, damage numbers, boss bar, banners, results card |
+| `Grenade` | Thrown grenade arc, fuse and blast callback |
 | `GameFX` / `GameAudio` | Generated particles, textures and sound effects |
 | `PowerUpPickup`, `IncreaseAmmoScript`, `IncreaseHealthScript` | Pickups |
 | `Editor/BuildAndroid` | Command-line and menu Android build |

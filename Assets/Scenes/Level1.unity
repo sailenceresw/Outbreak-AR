@@ -2215,12 +2215,13 @@ PrefabInstance:
     - target: {fileID: 5779608150239002450, guid: 063cc896506b947c7b2c2ae3beb5868f,
         type: 3}
       propertyPath: m_text
-      value: 'Welcome to my AR Project!
+      value: '<b>OUTBREAK AR</b>
 
-        You have to kill the zombies that
-        come after you in two waves to survive!
+        The dead are rising all around you.
 
-        Press Continue to BEGIN!
+        Survive 8 levels across two chapters.
+
+        Press Continue to begin.
 
 '
       objectReference: {fileID: 0}

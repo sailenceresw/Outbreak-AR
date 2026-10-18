@@ -4,7 +4,7 @@ using UnityEngine;
 public static class GameFX
 {
     static Material particleMaterial;
-    static Texture2D whiteTexture, ringTexture, arrowTexture, vignetteTexture;
+    static Texture2D whiteTexture, ringTexture, arrowTexture, vignetteTexture, topShadeTexture;
     static Sprite whiteSprite, ringSprite, arrowSprite;
 
     static Material ParticleMaterial
@@ -45,6 +45,58 @@ public static class GameFX
     public static void Shockwave(Vector3 position, Color color)
     {
         Burst(position, Vector3.up, color, 120, 6f, 0.12f, 0.8f, 0f, 180f);
+    }
+
+    // grenade blast: fireball, sparks, lingering smoke and a ring along the floor
+    public static void Explosion(Vector3 position)
+    {
+        Burst(position + Vector3.up * 0.15f, Vector3.up, new Color(1f, 0.55f, 0.15f, 1f), 45, 3.2f, 0.4f, 0.45f, -0.2f, 180f);
+        Burst(position + Vector3.up * 0.1f, Vector3.up, new Color(1f, 0.9f, 0.5f, 1f), 70, 7.5f, 0.045f, 0.8f, 1.2f, 160f);
+        Burst(position + Vector3.up * 0.2f, Vector3.up, new Color(0.22f, 0.2f, 0.18f, 0.7f), 30, 1.1f, 0.7f, 1.8f, -0.15f, 120f);
+        Shockwave(position + Vector3.up * 0.05f, new Color(1f, 0.6f, 0.2f, 0.8f));
+    }
+
+    // dark stain that spreads on the floor under a fallen zombie, then fades
+    public static void BloodPool(Vector3 floorPosition, float scale)
+    {
+        const float lifetime = 7f;
+        ParticleSystem system = CreateSystem("FX BloodPool", floorPosition + Vector3.up * 0.01f, Vector3.up,
+            new Color(0.28f, 0f, 0f, 0.85f), 0f, 0.9f * scale, lifetime, 0f, 0f);
+
+        ParticleSystem.MainModule main = system.main;
+        main.loop = false;
+        main.duration = 0.1f;
+        main.maxParticles = 1;
+        main.startLifetime = lifetime;
+        main.startSpeed = 0f;
+        main.startSize = Random.Range(0.75f, 1f) * scale;
+        // lie flat on the floor with a random spin
+        main.startRotation3D = true;
+        main.startRotationX = 90f * Mathf.Deg2Rad;
+        main.startRotationY = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+        main.startRotationZ = 0f;
+
+        ParticleSystem.EmissionModule emission = system.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)1) });
+
+        ParticleSystem.SizeOverLifetimeModule grow = system.sizeOverLifetime;
+        grow.enabled = true;
+        grow.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+            new Keyframe(0f, 0.2f), new Keyframe(0.12f, 1f), new Keyframe(1f, 1.05f)));
+
+        ParticleSystem.ColorOverLifetimeModule fade = system.colorOverLifetime;
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+            new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 0.75f), new GradientAlphaKey(0f, 1f) });
+        fade.color = gradient;
+
+        ParticleSystemRenderer renderer = system.GetComponent<ParticleSystemRenderer>();
+        renderer.alignment = ParticleSystemRenderSpace.World;
+
+        system.Play();
+        Object.Destroy(system.gameObject, lifetime + 0.5f);
     }
 
     public static ParticleSystem Burst(Vector3 position, Vector3 direction, Color color, int count,
@@ -198,6 +250,19 @@ public static class GameFX
                 });
             }
             return vignetteTexture;
+        }
+    }
+
+    // opaque at the top, clear at the bottom; sits behind the HUD so text stays readable over the camera
+    public static Texture2D TopShadeTexture
+    {
+        get
+        {
+            if (topShadeTexture == null)
+            {
+                topShadeTexture = NewTexture(64, (x, y) => Mathf.SmoothStep(0f, 1f, y / 63f));
+            }
+            return topShadeTexture;
         }
     }
 
