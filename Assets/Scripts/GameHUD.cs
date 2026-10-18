@@ -167,6 +167,12 @@ public class GameHUD : MonoBehaviour
         crosshair.gameObject.SetActive(visible);
     }
 
+    // a wider ring shows the shotgun's pellet spread
+    public void SetCrosshairWide(bool wide)
+    {
+        crosshair.sizeDelta = wide ? new Vector2(110f, 110f) : new Vector2(56f, 56f);
+    }
+
     public void SetScore(int score, int combo)
     {
         scoreText.text = combo > 1

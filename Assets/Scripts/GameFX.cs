@@ -24,9 +24,10 @@ public static class GameFX
             headshot ? 3.5f : 2.2f, headshot ? 0.09f : 0.06f, 0.7f, 1.2f, 70f);
     }
 
-    public static void MuzzleFlash(Vector3 position, Vector3 direction)
+    public static void MuzzleFlash(Vector3 position, Vector3 direction, bool big = false)
     {
-        Burst(position, direction, new Color(1f, 0.8f, 0.3f, 1f), 10, 3f, 0.05f, 0.08f, 0f, 25f);
+        Burst(position, direction, new Color(1f, 0.8f, 0.3f, 1f), big ? 24 : 10, big ? 4.5f : 3f,
+            big ? 0.09f : 0.05f, big ? 0.12f : 0.08f, 0f, big ? 40f : 25f);
     }
 
     // dirt kicked up when a zombie claws out of the ground

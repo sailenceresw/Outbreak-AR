@@ -91,7 +91,23 @@ public static class LevelCatalog
         },
     };
 
+    // first level of each chapter scene, in build order
+    static readonly int[] ChapterFirstLevels = { 0, 4 };
+
+    // the shotgun becomes available from this level on
+    public const int ShotgunUnlockLevel = 1;
+
     public static int Count => Levels.Length;
+
+    public static int SceneForLevel(int index)
+    {
+        int scene = 0;
+        for (int i = 0; i < ChapterFirstLevels.Length; i++)
+        {
+            if (index >= ChapterFirstLevels[i]) scene = i;
+        }
+        return scene;
+    }
 
     public static LevelDefinition Get(int index)
     {
@@ -102,5 +118,46 @@ public static class LevelCatalog
     public static bool IsFinalBoss(int index)
     {
         return index == Levels.Length - 1;
+    }
+}
+
+// Progress saved on the device between sessions.
+public static class GameProgress
+{
+    const string UnlockedKey = "UnlockedLevel";
+    const string HighScoreKey = "HighScore";
+    const string LevelBestKey = "LevelBest_";
+
+    // highest level index the player may start from
+    public static int UnlockedLevel => Mathf.Clamp(PlayerPrefs.GetInt(UnlockedKey, 0), 0, LevelCatalog.Count - 1);
+
+    public static int HighScore => PlayerPrefs.GetInt(HighScoreKey, 0);
+
+    public static void Unlock(int levelIndex)
+    {
+        if (levelIndex <= UnlockedLevel || levelIndex >= LevelCatalog.Count) return;
+        PlayerPrefs.SetInt(UnlockedKey, levelIndex);
+        PlayerPrefs.Save();
+    }
+
+    // returns true when this is a new overall high score
+    public static bool SubmitHighScore(int score)
+    {
+        if (score <= HighScore) return false;
+        PlayerPrefs.SetInt(HighScoreKey, score);
+        PlayerPrefs.Save();
+        return true;
+    }
+
+    public static int LevelBest(int levelIndex)
+    {
+        return PlayerPrefs.GetInt(LevelBestKey + levelIndex, 0);
+    }
+
+    public static void SubmitLevelScore(int levelIndex, int levelScore)
+    {
+        if (levelScore <= LevelBest(levelIndex)) return;
+        PlayerPrefs.SetInt(LevelBestKey + levelIndex, levelScore);
+        PlayerPrefs.Save();
     }
 }

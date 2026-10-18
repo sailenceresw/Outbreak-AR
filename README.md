@@ -4,6 +4,11 @@ An augmented-reality zombie survival shooter for Android and iOS, built with Uni
 
 Scan your room, then hold off waves of zombies that claw up out of the floor around you. Turn to find them and shoot to survive.
 
+<p align="center">
+  <img src="docs/android-gameplay.png" alt="Outbreak AR running on a Redmi Note 10 Pro: a zombie up close over the camera feed, with the health, score and ammo HUD and the death screen" width="300">
+</p>
+<p align="center"><em>Running on a Redmi Note 10 Pro (Android 13).</em></p>
+
 ## Campaign
 
 | Chapter | Level | Objective |
@@ -23,6 +28,8 @@ Chapter 1 runs in `Level1.unity` and Chapter 2 in `Level2.unity`. Levels within 
 
 - **Enemies:** Walkers, fast Runners, armoured Brutes and bosses that summon reinforcements and enrage at half health.
 - **Combat:** hitscan shooting with headshots, combo multipliers and a saved high score.
+- **Two weapons:** pistol and a pump shotgun, unlocked on level 2. The shotgun fires 8 pellets, does more damage up close and uses shells. Tap SWAP to switch.
+- **Level select:** progress is saved on the device. Returning players can start from any unlocked level and see their best score for each.
 - **Power-ups:** Rapid Fire, Hollow Points, Cryo Pulse and Shockwave.
 - **Supply drops:** ammo crates and med kits. Shoot them or walk up to them to collect.
 - **Danger cues:** off-screen threat arrows, a low-health heartbeat and vignette, and music that intensifies during boss fights and hordes.
@@ -30,11 +37,25 @@ Chapter 1 runs in `Level1.unity` and Chapter 2 in `Level2.unity`. Levels within 
 
 ## Getting started
 
-1. Open the project in Unity **2022.3.15f1**.
+1. Open the project in Unity **2022.3.15f1** with Android Build Support.
 2. Open `Assets/Scenes/Level1.unity`.
-3. Build for Android (ARCore) or iOS (ARKit), or test in the Editor with XR Simulation or AR Foundation Remote.
+3. Build for Android (ARCore) or iOS (ARKit), or test in the Editor with XR Simulation.
 
 Large binary assets are stored with Git LFS. Run `git lfs install` before cloning.
+
+Keep the project outside OneDrive, Dropbox and other synced folders. Syncing corrupts Unity's `Library` cache and produces broken builds.
+
+### Android build
+
+The Android build targets API 34 (Android 14) with a minimum of API 30. Unity 2022.3.15's bundled SDK stops at API 32, so copy `platforms/android-34` from an Android Studio SDK into the editor's `PlaybackEngines/AndroidPlayer/SDK/platforms` folder.
+
+Build from the editor with **Build > Android APK**, or from the command line with Unity Hub signed in:
+
+```
+Unity.exe -batchmode -quit -projectPath . -buildTarget Android -executeMethod BuildAndroid.Build
+```
+
+The APK is written to `Builds/Android/OutbreakAR.apk`.
 
 ## Scripts
 
@@ -42,10 +63,12 @@ Large binary assets are stored with Git LFS. Run `git lfs install` before clonin
 |---|---|
 | `GameControllerScript` | Game flow, levels, spawning, shooting, score |
 | `ZombieController` | Zombie types, movement, attacks, boss behaviour |
-| `LevelCatalog` | Level definitions |
+| `LevelCatalog` | Level definitions and saved progress (`GameProgress`) |
+| `LevelSelectMenu` | Runtime level picker |
 | `GameHUD` | Crosshair, threat arrows, boss bar, banners |
 | `GameFX` / `GameAudio` | Generated particles, textures and sound effects |
 | `PowerUpPickup`, `IncreaseAmmoScript`, `IncreaseHealthScript` | Pickups |
+| `Editor/BuildAndroid` | Command-line and menu Android build |
 
 ## Credits
 
