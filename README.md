@@ -5,9 +5,9 @@ An augmented-reality zombie survival shooter for Android and iOS, built with **U
 Scan your room, then hold off waves of zombies that claw up out of your floor. Turn to find them, listen for where they are, dodge acid and shoot to survive. Between fights, level up, complete daily missions and spend Supply Points on new guns.
 
 <p align="center">
-  <img src="docs/screenshots/zombie-warzombie.png" alt="A rotting soldier zombie in a peaked cap reaching for the camera, with the red on-target crosshair, health and XP bars, Magnum Revolver ammo, and the fire, grenade and swap buttons" width="270">
-  <img src="docs/screenshots/zombie-girl-attack.png" alt="A zombie girl lunging at the player at low health, with a red danger vignette, a 44 damage number and a second zombie flanking from the left" width="270">
-  <img src="docs/screenshots/home-screen.png" alt="The home screen over the camera view: OUTBREAK title, survivor level card with XP bar, and Play, Levels, Missions, Shop and Settings buttons" width="270">
+  <img src="docs/screenshots/zombie-warzombie.jpg" alt="A rotting soldier zombie in a peaked cap reaching for the camera, with the red on-target crosshair, health and XP bars, Magnum Revolver ammo, and the fire, grenade and swap buttons" width="270">
+  <img src="docs/screenshots/zombie-girl-attack.jpg" alt="A zombie girl lunging at the player at low health, with a red danger vignette, a 44 damage number and a second zombie flanking from the left" width="270">
+  <img src="docs/screenshots/home-screen.jpg" alt="The home screen over the camera view: OUTBREAK title, survivor level card with XP bar, and Play, Levels, Missions, Shop and Settings buttons" width="270">
 </p>
 <p align="center"><em>Running on a Redmi Note 10 Pro (Android 13).</em></p>
 
@@ -17,35 +17,35 @@ Scan your room, then hold off waves of zombies that claw up out of your floor. T
 Mixamo characters and animations (walk, run, scream, bite, crawl, hit reactions), blood that sprays, pools on the floor and sticks to wounds, headshot kills that take the head off, and blood on the screen when you're hit.
 
 <p align="center">
-  <img src="docs/screenshots/gore-close.png" alt="A zombie close up with blood spatter across the screen" width="220">
-  <img src="docs/screenshots/horde-incoming.png" alt="Horde Incoming warning with blood on the screen" width="220">
-  <img src="docs/screenshots/headshot-death.png" alt="Headshot call-out over the death screen" width="220">
+  <img src="docs/screenshots/gore-close.jpg" alt="A zombie close up with blood spatter across the screen" width="220">
+  <img src="docs/screenshots/horde-incoming.jpg" alt="Horde Incoming warning with blood on the screen" width="220">
+  <img src="docs/screenshots/headshot-death.jpg" alt="Headshot call-out over the death screen" width="220">
 </p>
 
 ### Spitters and acid
 Spitters hang back and lob acid at where you stand. Step aside to dodge it, or shoot it out of the air.
 
 <p align="center">
-  <img src="docs/screenshots/acid-hit.png" alt="Green acid splashed across the screen" width="220">
-  <img src="docs/screenshots/acid-dodged.png" alt="Dodged call-out after stepping out of the acid's path" width="220">
+  <img src="docs/screenshots/acid-hit.jpg" alt="Green acid splashed across the screen" width="220">
+  <img src="docs/screenshots/acid-dodged.jpg" alt="Dodged call-out after stepping out of the acid's path" width="220">
 </p>
 
 ### Home, missions and progression
 
 <p align="center">
-  <img src="docs/screenshots/home-screen.png" alt="Home screen" width="200">
-  <img src="docs/screenshots/missions.png" alt="Mission board with survivor level, XP bar, streak and three daily missions" width="200">
-  <img src="docs/screenshots/level-up.png" alt="Level up call-out unlocking an extra grenade every level" width="200">
-  <img src="docs/screenshots/settings.png" alt="Settings panel with sound, vibration and reset progress" width="200">
+  <img src="docs/screenshots/home-screen.jpg" alt="Home screen" width="200">
+  <img src="docs/screenshots/missions.jpg" alt="Mission board with survivor level, XP bar, streak and three daily missions" width="200">
+  <img src="docs/screenshots/level-up.jpg" alt="Level up call-out unlocking an extra grenade every level" width="200">
+  <img src="docs/screenshots/settings.jpg" alt="Settings panel with sound, vibration and reset progress" width="200">
 </p>
 
 ### Arsenal shop
 Spend Supply Points on new guns, upgrades and items.
 
 <p align="center">
-  <img src="docs/screenshots/shop-weapons.png" alt="Weapons tab: pistol, magnum revolver, pump shotgun, vector SMG and assault rifle" width="220">
-  <img src="docs/screenshots/shop-upgrades.png" alt="Upgrades tab: damage, fire rate and ammo for each gun" width="220">
-  <img src="docs/screenshots/shop-items.png" alt="Items tab: grenade pack, adrenaline shot and ammo cache" width="220">
+  <img src="docs/screenshots/shop-weapons.jpg" alt="Weapons tab: pistol, magnum revolver, pump shotgun, vector SMG and assault rifle" width="220">
+  <img src="docs/screenshots/shop-upgrades.jpg" alt="Upgrades tab: damage, fire rate and ammo for each gun" width="220">
+  <img src="docs/screenshots/shop-items.jpg" alt="Items tab: grenade pack, adrenaline shot and ammo cache" width="220">
 </p>
 
 ## Campaign

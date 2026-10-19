@@ -36,3 +36,6 @@
 *.a filter=lfs diff=lfs merge=lfs -text
 # baked lighting is binary despite the .asset extension
 LightingData.asset filter=lfs diff=lfs merge=lfs -text
+
+# README images stay in plain git: GitHub can't show LFS images in a private repo's README
+docs/** -filter -diff -merge binary
