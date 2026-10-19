@@ -53,6 +53,7 @@ public class LevelSelectMenu : MonoBehaviour
         Stretch(gridRect, new Vector2(0.04f, 0.13f), new Vector2(0.96f, 0.82f));
 
         Button back = UIStyle.NewButton(root, template, "BACK", UIStyle.Steel, 24f, Close);
+        UIStyle.AddIcon(back, "Back");
         Stretch((RectTransform)back.transform, new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.1f));
 
         int unlocked = GameProgress.UnlockedLevel;

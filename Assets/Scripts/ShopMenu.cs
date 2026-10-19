@@ -63,6 +63,7 @@ public class ShopMenu : MonoBehaviour
         Stretch(list, new Vector2(0.04f, 0.16f), new Vector2(0.96f, 0.785f));
 
         Button close = UIStyle.NewButton(root, template, "CLOSE", UIStyle.Blood, 24f, Close);
+        UIStyle.AddIcon(close, "Back");
         Stretch((RectTransform)close.transform, new Vector2(0.3f, 0.06f), new Vector2(0.7f, 0.12f));
     }
 
@@ -194,7 +195,8 @@ public class ShopMenu : MonoBehaviour
             AddRow(i, items.Length, item.name + "  <color=#5AB4FF>x" + held + "</color>",
                 "<color=#999999>" + item.description + "</color>",
                 full ? "FULL" : item.cost.ToString("N0") + " SP", full ? UIStyle.Steel : UIStyle.Gold,
-                full ? (Action)null : () => Purchase(Inventory.Buy(item.id)));
+                full ? (Action)null : () => Purchase(Inventory.Buy(item.id)),
+                1f, UIStyle.Icon(item.id.ToString()));
         }
     }
 

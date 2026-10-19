@@ -1,0 +1,37 @@
+﻿Icons from game-icons.net, licensed CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/).
+Authors: Lorc, Delapouite, Skoll, sbed, Guard13007, Zeromancer (https://game-icons.net).
+
+Fire.png: crosshair by Delapouite
+Swap.png: cycle by Lorc
+Grenade.png: grenade by Lorc
+Trap.png: box-trap by Skoll
+Pause.png: pause-button by Guard13007
+Map.png: world by Lorc
+Levels.png: graveyard by Delapouite
+Missions.png: checklist by Delapouite
+Shop.png: backpack by Delapouite
+Dex.png: shambling-zombie by Delapouite
+Settings.png: cog by Lorc
+Home.png: house by Delapouite
+Back.png: return-arrow by Lorc
+Profile.png: person by Delapouite
+Achievements.png: laurels-trophy by Delapouite
+Adrenaline.png: syringe by Lorc
+AmmoCache.png: ammo-box by sbed
+GrenadePack.png: grenade by Lorc
+Outbreak.png: biohazard by Lorc
+Nest.png: skull-crossed-bones by Lorc
+Cache.png: locked-chest by Lorc
+RareCache.png: open-chest by Skoll
+Health.png: heart-plus by Zeromancer
+Ammo.png: bullets by Lorc
+Walk.png: walking-boot by Lorc
+Sound.png: speaker by Delapouite
+Vibration.png: vibrating-smartphone by Delapouite
+Graphics.png: settings-knobs by Delapouite
+RapidFire.png: heavy-lightning by Lorc
+HollowPoints.png: bullets by Lorc
+Cryo.png: snowflake-1 by Lorc
+Shockwave.png: radioactive by Lorc
+Score.png: star-medal by Delapouite
+Play.png: raise-zombie by Skoll

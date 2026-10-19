@@ -232,11 +232,14 @@ public class GameHUD : MonoBehaviour
 
     void BuildHealthPanel(TMP_Text template)
     {
+        // a heart to the left of the health bar
+        HudIcon("Health", new Vector2(14f, -16f), 42f, new Vector2(0f, 1f), new Color(1f, 0.35f, 0.3f, 0.95f));
+
         RectTransform panel = NewRect("HealthPanel", root);
         panel.anchorMin = panel.anchorMax = new Vector2(0f, 1f);
         panel.pivot = new Vector2(0f, 1f);
-        panel.anchoredPosition = new Vector2(18f, -14f);
-        panel.sizeDelta = new Vector2(250f, 46f);
+        panel.anchoredPosition = new Vector2(62f, -14f);
+        panel.sizeDelta = new Vector2(210f, 46f);
 
         // "HEALTH 100" sits on the left so a long score line in the centre can't run into it
         healthValue = NewText(template, "Label", 18f, TextAlignmentOptions.BottomLeft, panel);
@@ -266,7 +269,7 @@ public class GameHUD : MonoBehaviour
         xpPanel.anchorMin = xpPanel.anchorMax = new Vector2(0f, 1f);
         xpPanel.pivot = new Vector2(0f, 1f);
         xpPanel.anchoredPosition = new Vector2(18f, -66f);
-        xpPanel.sizeDelta = new Vector2(250f, 20f);
+        xpPanel.sizeDelta = new Vector2(254f, 20f);
 
         xpLevelText = NewText(template, "Level", 16f, TextAlignmentOptions.MidlineLeft, xpPanel);
         xpLevelText.rectTransform.anchorMin = new Vector2(0f, 0f);
@@ -317,6 +320,10 @@ public class GameHUD : MonoBehaviour
         roundsText.rectTransform.anchoredPosition = new Vector2(0f, -20f);
         roundsText.rectTransform.sizeDelta = new Vector2(0f, 46f);
         roundsText.fontStyle = FontStyles.Bold;
+        // bullets at the right edge, the count just left of them
+        roundsText.margin = new Vector4(0f, 0f, 44f, 0f);
+        Image bullets = HudIcon("Ammo", new Vector2(0f, -24f), 38f, new Vector2(1f, 1f), new Color(1f, 0.85f, 0.5f, 0.9f));
+        if (bullets != null) bullets.rectTransform.SetParent(panel, false);
 
         grenadeText = NewText(template, "Grenades", 18f, TextAlignmentOptions.TopRight, panel);
         grenadeText.rectTransform.anchorMin = new Vector2(0f, 1f);
@@ -325,6 +332,23 @@ public class GameHUD : MonoBehaviour
         grenadeText.rectTransform.anchoredPosition = new Vector2(0f, -66f);
         grenadeText.rectTransform.sizeDelta = new Vector2(0f, 22f);
         grenadeText.color = new Color(0.75f, 0.9f, 0.55f, 1f);
+    }
+
+    // a small icon pinned to a corner of the HUD (corner as anchor and pivot)
+    Image HudIcon(string name, Vector2 position, float size, Vector2 corner, Color color)
+    {
+        Sprite sprite = UIStyle.Icon(name);
+        if (sprite == null) return null;
+        RectTransform rect = NewRect(name + "Icon", root);
+        rect.anchorMin = rect.anchorMax = rect.pivot = corner;
+        rect.anchoredPosition = position;
+        rect.sizeDelta = new Vector2(size, size);
+        Image image = rect.gameObject.AddComponent<Image>();
+        image.sprite = sprite;
+        image.preserveAspect = true;
+        image.raycastTarget = false;
+        image.color = color;
+        return image;
     }
 
     // full-screen card shown behind the scene's restart prompt when the player dies

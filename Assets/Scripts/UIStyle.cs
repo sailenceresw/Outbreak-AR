@@ -145,6 +145,48 @@ public static class UIStyle
         return button;
     }
 
+    // ---------- Icons ----------
+
+    static readonly System.Collections.Generic.Dictionary<string, Sprite> icons = new System.Collections.Generic.Dictionary<string, Sprite>();
+
+    // white icons from game-icons.net (CC BY 3.0) in Resources/Icons; see CREDITS.txt there
+    public static Sprite Icon(string name)
+    {
+        if (!icons.TryGetValue(name, out Sprite sprite))
+        {
+            sprite = Resources.Load<Sprite>("Icons/" + name);
+            icons[name] = sprite;
+        }
+        return sprite;
+    }
+
+    // an icon at the left of a button, with its label moved over to make room;
+    // a button with no label gets the icon centred instead
+    public static Image AddIcon(Button button, string iconName, Color? tint = null)
+    {
+        Sprite sprite = Icon(iconName);
+        if (button == null || sprite == null) return null;
+
+        Transform existing = button.transform.Find("Icon");
+        if (existing != null) UnityEngine.Object.Destroy(existing.gameObject);
+
+        GameObject go = new GameObject("Icon", typeof(RectTransform));
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.SetParent(button.transform, false);
+        Image image = go.AddComponent<Image>();
+        image.sprite = sprite;
+        image.preserveAspect = true;
+        image.raycastTarget = false;
+        image.color = tint ?? Color.white;
+
+        IconPadding padding = button.GetComponent<IconPadding>();
+        if (padding == null) padding = button.gameObject.AddComponent<IconPadding>();
+        padding.icon = rect;
+        padding.label = button.GetComponentInChildren<TMP_Text>(true);
+        padding.Apply();
+        return image;
+    }
+
     static Sprite BuildSprite(bool outlineOnly)
     {
         Texture2D texture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);

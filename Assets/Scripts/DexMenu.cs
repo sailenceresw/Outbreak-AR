@@ -57,6 +57,7 @@ public class DexMenu : MonoBehaviour
         }
 
         Button close = UIStyle.NewButton(root, template, "CLOSE", UIStyle.Blood, 24f, Close);
+        UIStyle.AddIcon(close, "Back");
         Stretch((RectTransform)close.transform, new Vector2(0.3f, 0.05f), new Vector2(0.7f, 0.11f));
     }
 

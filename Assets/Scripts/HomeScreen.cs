@@ -73,15 +73,15 @@ public class HomeScreen : MonoBehaviour
         detailText = NewText(cardRect, string.Empty, 19f, FontStyles.Normal, new Vector2(0.05f, 0.06f), new Vector2(0.95f, 0.4f));
 
         // the two ways to play first and largest, then a grid of the rest
-        Button play = AddButton("PLAY", UIStyle.Blood, 40f, 0.52f, 0.63f, onPlay);
+        Button play = AddButton("PLAY", UIStyle.Blood, 40f, 0.52f, 0.63f, onPlay, icon: "Play");
         playLabel = play.GetComponentInChildren<TMP_Text>();
-        Button map = AddButton("WORLD MAP", UIStyle.Toxic, 30f, 0.435f, 0.51f, onMap);
+        Button map = AddButton("WORLD MAP", UIStyle.Toxic, 30f, 0.435f, 0.51f, onMap, icon: "Map");
         mapLabel = map.GetComponentInChildren<TMP_Text>();
-        AddButton("LEVELS", UIStyle.Steel, 22f, 0.355f, 0.42f, onLevels, 0.12f, 0.49f);
-        missionsLabel = AddButton("MISSIONS", UIStyle.Gold, 22f, 0.355f, 0.42f, onMissions, 0.51f, 0.88f).GetComponentInChildren<TMP_Text>();
-        AddButton("SHOP", UIStyle.Gold, 22f, 0.275f, 0.34f, onShop, 0.12f, 0.49f);
-        dexLabel = AddButton("ZOMBIE-DEX", new Color(0.3f, 0.9f, 1f), 22f, 0.275f, 0.34f, onDex, 0.51f, 0.88f).GetComponentInChildren<TMP_Text>();
-        AddButton("SETTINGS", UIStyle.Steel, 20f, 0.2f, 0.255f, ShowSettings);
+        AddButton("LEVELS", UIStyle.Steel, 22f, 0.355f, 0.42f, onLevels, 0.12f, 0.49f, "Levels");
+        missionsLabel = AddButton("MISSIONS", UIStyle.Gold, 22f, 0.355f, 0.42f, onMissions, 0.51f, 0.88f, "Missions").GetComponentInChildren<TMP_Text>();
+        AddButton("SHOP", UIStyle.Gold, 22f, 0.275f, 0.34f, onShop, 0.12f, 0.49f, "Shop");
+        dexLabel = AddButton("ZOMBIE-DEX", new Color(0.3f, 0.9f, 1f), 22f, 0.275f, 0.34f, onDex, 0.51f, 0.88f, "Dex").GetComponentInChildren<TMP_Text>();
+        AddButton("SETTINGS", UIStyle.Steel, 20f, 0.2f, 0.255f, ShowSettings, icon: "Settings");
 
         TMP_Text hint = NewText(root, "Find a clear floor space. Zombies will rise from it.", 18f, FontStyles.Normal, new Vector2(0.05f, 0.07f), new Vector2(0.95f, 0.12f));
         hint.color = new Color(1f, 1f, 1f, 0.55f);
@@ -144,11 +144,13 @@ public class HomeScreen : MonoBehaviour
             GameSettings.Sound = !GameSettings.Sound;
             sound.GetComponentInChildren<TMP_Text>().text = SoundLabel();
         });
+        UIStyle.AddIcon(sound, "Sound");
         graphics = CardButton(cardRect, GraphicsLabel(), UIStyle.XP, 0.53f, () =>
         {
             GameSettings.Quality = GameSettings.HighQuality ? GraphicsQuality.Low : GraphicsQuality.High;
             graphics.GetComponentInChildren<TMP_Text>().text = GraphicsLabel();
         });
+        UIStyle.AddIcon(graphics, "Graphics");
         vibration = CardButton(cardRect, VibrationLabel(), UIStyle.XP, 0.38f, () =>
         {
             GameSettings.Vibration = !GameSettings.Vibration;
@@ -157,6 +159,7 @@ public class HomeScreen : MonoBehaviour
             if (GameSettings.Vibration) Handheld.Vibrate();
 #endif
         });
+        UIStyle.AddIcon(vibration, "Vibration");
         reset = CardButton(cardRect, "RESET PROGRESS", UIStyle.Blood, 0.21f, () =>
         {
             // two taps so it can't happen by accident
@@ -192,7 +195,7 @@ public class HomeScreen : MonoBehaviour
     // ---------- Builders ----------
 
     Button AddButton(string label, Color accent, float size, float bottom, float top, Action onClick,
-        float left = 0.12f, float right = 0.88f)
+        float left = 0.12f, float right = 0.88f, string icon = null)
     {
         Button button = UIStyle.NewButton(root, template, label, accent, size, () =>
         {
@@ -203,6 +206,7 @@ public class HomeScreen : MonoBehaviour
         TMP_Text text = button.GetComponentInChildren<TMP_Text>();
         text.richText = true;
         text.textWrappingMode = TextWrappingModes.Normal;
+        if (icon != null) UIStyle.AddIcon(button, icon);
         return button;
     }
 

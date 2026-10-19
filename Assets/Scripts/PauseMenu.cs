@@ -103,6 +103,10 @@ public class PauseMenu : MonoBehaviour
         rect.anchorMin = new Vector2(0.1f, bottom);
         rect.anchorMax = new Vector2(0.9f, bottom + 0.13f);
         rect.offsetMin = rect.offsetMax = Vector2.zero;
+
+        string icon = label.StartsWith("RESUME") ? "Play" : label.StartsWith("RESTART") ? "Swap"
+            : label.StartsWith("MISSIONS") ? "Missions" : label.StartsWith("HOME") ? "Home" : null;
+        if (icon != null) UIStyle.AddIcon(button, icon);
     }
 
     static TMP_Text NewLabel(TMP_Text template, RectTransform parent, string value, float size, Vector2 min, Vector2 max)

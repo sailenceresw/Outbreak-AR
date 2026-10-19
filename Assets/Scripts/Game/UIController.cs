@@ -101,6 +101,7 @@ public class UIController : GameSystem
         StyleSceneButtons();
         CreatePauseButton();
         CreateHomeButton();
+        AddButtonIcons();
         if (!skipGreeting) ShowHomeScreen();
     }
 
@@ -458,6 +459,30 @@ public class UIController : GameSystem
                 }
             }
         }
+    }
+
+    // icons on the fight and end-of-run buttons
+    void AddButtonIcons()
+    {
+        AddIconTo(Game.shootButton, "Fire");
+        AddIconTo(swapButton, "Swap");
+        AddIconTo(grenadeButton, "Grenade");
+        AddIconTo(trapButton, "Trap");
+        AddIconTo(missionsButton, "Missions");
+        AddIconTo(homeButton, "Home");
+        if (pauseButton != null)
+        {
+            // the pause button is the icon alone
+            TMP_Text label = pauseButton.GetComponentInChildren<TMP_Text>(true);
+            if (label != null) label.text = string.Empty;
+            AddIconTo(pauseButton, "Pause");
+        }
+    }
+
+    static void AddIconTo(GameObject target, string icon)
+    {
+        if (target == null) return;
+        UIStyle.AddIcon(target.GetComponent<Button>(), icon);
     }
 
     static void StyleButtonObject(GameObject target, Color accent)

@@ -17,7 +17,10 @@ public class MapScreen : MonoBehaviour
     const int TileSize = 256;
     const int TileRadius = 2;
     const double SiteRadiusMeters = 650;
-    const string TileUrl = "https://a.basemaps.cartocdn.com/dark_all/{0}/{1}/{2}.png";
+    // Esri's dark grey canvas (no key needed; zoom/row/column, up to zoom 16), OpenStreetMap as a fallback
+    const string TileUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{0}/{1}/{2}";
+    const int SourceZoom = 16;
+    const string FallbackTileUrl = "https://tile.openstreetmap.org/{0}/{1}/{2}.png";
     const string UserAgent = "OutbreakAR/1.0 (Unity; personal project)";
 
     static readonly Dictionary<string, Texture2D> tileCache = new Dictionary<string, Texture2D>();
@@ -121,10 +124,11 @@ public class MapScreen : MonoBehaviour
         bottomShade.color = new Color(0f, 0f, 0f, 0.7f);
         NewText(bottom, "<color=#FF5040>OUTBREAK</color>   <color=#FFC832>CACHE</color>   <color=#7CFF5A>PARK CACHE</color>   <color=#C080FF>NEST</color>",
             17f, FontStyles.Bold, new Vector2(0f, 0.62f), new Vector2(1f, 0.95f));
-        TMP_Text credit = NewText(bottom, "Map data © OpenStreetMap contributors  ·  © CARTO", 13f, FontStyles.Normal,
+        TMP_Text credit = NewText(bottom, "Basemap © Esri, HERE, Garmin  ·  © OpenStreetMap contributors", 13f, FontStyles.Normal,
             new Vector2(0f, 0.02f), new Vector2(0.62f, 0.3f));
         credit.color = new Color(1f, 1f, 1f, 0.5f);
         Button close = UIStyle.NewButton(bottom, template, "CLOSE", UIStyle.Blood, 22f, Close);
+        UIStyle.AddIcon(close, "Back");
         Stretch((RectTransform)close.transform, new Vector2(0.64f, 0.08f), new Vector2(0.96f, 0.55f));
 
         BuildInfoPanel(root);
@@ -252,14 +256,43 @@ public class MapScreen : MonoBehaviour
 
     IEnumerator LoadTile(long x, long y, string key, RawImage image)
     {
+        // a fallback OpenStreetMap tile already downloaded for this spot
         if (tileCache.TryGetValue(key, out Texture2D cached))
         {
             image.texture = cached;
+            image.color = new Color(0.42f, 0.43f, 0.47f);
+            yield break;
+        }
+
+        // the dark basemap stops at zoom 16: each zoom-17 tile shows its quarter of the zoom-16 tile
+        long sourceX = x / 2, sourceY = y / 2;
+        string sourceKey = "esri_" + sourceX + "_" + sourceY;
+        Rect quarter = new Rect((x % 2) * 0.5f, (y % 2) == 0 ? 0.5f : 0f, 0.5f, 0.5f);
+        if (!tileCache.TryGetValue(sourceKey, out Texture2D source))
+        {
+            using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(string.Format(TileUrl, SourceZoom, sourceY, sourceX)))
+            {
+                request.SetRequestHeader("User-Agent", UserAgent);
+                yield return request.SendWebRequest();
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    source = DownloadHandlerTexture.GetContent(request);
+                    source.wrapMode = TextureWrapMode.Clamp;
+                    tileCache[sourceKey] = source;
+                }
+            }
+        }
+        if (image == null) yield break;
+        if (source != null)
+        {
+            image.texture = source;
+            image.uvRect = quarter;
             image.color = Color.white;
             yield break;
         }
 
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(string.Format(TileUrl, Zoom, x, y)))
+        // fallback: the standard OpenStreetMap tile, dimmed to sit with the dark theme
+        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(string.Format(FallbackTileUrl, Zoom, x, y)))
         {
             request.SetRequestHeader("User-Agent", UserAgent);
             yield return request.SendWebRequest();
@@ -268,7 +301,7 @@ public class MapScreen : MonoBehaviour
             texture.wrapMode = TextureWrapMode.Clamp;
             tileCache[key] = texture;
             image.texture = texture;
-            image.color = Color.white;
+            image.color = new Color(0.42f, 0.43f, 0.47f);
         }
     }
 
@@ -316,9 +349,27 @@ public class MapScreen : MonoBehaviour
             button.targetGraphic = image;
             button.onClick.AddListener(() => Select(captured));
 
-            string glyph = site.kind == SiteKind.Outbreak ? "!" : site.kind == SiteKind.Nest ? "B" : site.rare ? "*" : "+";
-            TMP_Text label = NewText(marker, cleared ? "-" : glyph, 30f, FontStyles.Bold, Vector2.zero, Vector2.one);
-            label.color = new Color(0.05f, 0.05f, 0.05f);
+            // a dark icon on the coloured pin: biohazard, skull, chest, or open chest for a rare park cache
+            string iconName = site.kind == SiteKind.Outbreak ? "Outbreak" : site.kind == SiteKind.Nest ? "Nest" : site.rare ? "RareCache" : "Cache";
+            Sprite icon = UIStyle.Icon(iconName);
+            if (icon != null)
+            {
+                RectTransform iconRect = NewRect(marker, "Icon");
+                iconRect.anchorMin = new Vector2(0.14f, 0.14f);
+                iconRect.anchorMax = new Vector2(0.86f, 0.86f);
+                iconRect.offsetMin = iconRect.offsetMax = Vector2.zero;
+                Image iconImage = iconRect.gameObject.AddComponent<Image>();
+                iconImage.sprite = icon;
+                iconImage.preserveAspect = true;
+                iconImage.raycastTarget = false;
+                iconImage.color = new Color(0.05f, 0.05f, 0.05f, cleared ? 0.4f : 1f);
+            }
+            else
+            {
+                string glyph = site.kind == SiteKind.Outbreak ? "!" : site.kind == SiteKind.Nest ? "B" : site.rare ? "*" : "+";
+                TMP_Text label = NewText(marker, cleared ? "-" : glyph, 30f, FontStyles.Bold, Vector2.zero, Vector2.one);
+                label.color = new Color(0.05f, 0.05f, 0.05f);
+            }
             markers[marker] = site;
         }
         PositionMarkers();
