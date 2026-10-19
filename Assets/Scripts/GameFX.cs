@@ -54,6 +54,78 @@ public static class GameFX
         Burst(position + Vector3.up * 0.1f, Vector3.up, new Color(1f, 0.9f, 0.5f, 1f), 70, 7.5f, 0.045f, 0.8f, 1.2f, 160f);
         Burst(position + Vector3.up * 0.2f, Vector3.up, new Color(0.22f, 0.2f, 0.18f, 0.7f), 30, 1.1f, 0.7f, 1.8f, -0.15f, 120f);
         Shockwave(position + Vector3.up * 0.05f, new Color(1f, 0.6f, 0.2f, 0.8f));
+        FlashLight(position + Vector3.up * 0.5f, new Color(1f, 0.6f, 0.25f), 8f, 6f, 0.35f);
+    }
+
+    // brief point light so muzzle flashes and blasts light up the zombies around them
+    public static void FlashLight(Vector3 position, Color color, float intensity, float range, float duration)
+    {
+        GameObject holder = new GameObject("FX Flash");
+        holder.transform.position = position;
+        Light light = holder.AddComponent<Light>();
+        light.type = LightType.Point;
+        light.color = color;
+        light.intensity = intensity;
+        light.range = range;
+        light.shadows = LightShadows.None;
+        holder.AddComponent<FadeLight>().duration = duration;
+    }
+
+    // a dark blood mark that sticks to a zombie's body where it was shot
+    public static void Wound(Transform bone, Vector3 point, Vector3 shotDirection)
+    {
+        ParticleSystem system = CreateSystem("FX Wound", point - shotDirection.normalized * 0.02f, -shotDirection,
+            new Color(0.32f, 0f, 0f, 0.95f), 0f, 0.08f, 1000f, 0f, 0f);
+        system.transform.SetParent(bone, true);
+
+        ParticleSystem.MainModule main = system.main;
+        main.loop = false;
+        main.duration = 0.1f;
+        main.maxParticles = 3;
+        main.startLifetime = 1000f;
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.09f);
+        // follow the body as it animates
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+
+        ParticleSystem.ShapeModule shape = system.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.03f;
+
+        // no fade: the wound stays until the corpse is gone
+        ParticleSystem.ColorOverLifetimeModule fade = system.colorOverLifetime;
+        fade.enabled = false;
+
+        ParticleSystem.EmissionModule emission = system.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)3) });
+        system.Play();
+    }
+
+    // brass casing flicked out of the right side of the gun
+    public static void ShellCasing(Vector3 position, Vector3 right, Vector3 up, bool shotgun)
+    {
+        GameObject casing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        casing.name = "FX Casing";
+        Object.Destroy(casing.GetComponent<Collider>());
+        casing.transform.position = position;
+        casing.transform.localScale = shotgun ? new Vector3(0.02f, 0.03f, 0.02f) : new Vector3(0.009f, 0.012f, 0.009f);
+        casing.transform.rotation = Random.rotation;
+
+        Renderer renderer = casing.GetComponent<Renderer>();
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        MaterialPropertyBlock block = new MaterialPropertyBlock();
+        Color brass = shotgun ? new Color(0.7f, 0.12f, 0.1f) : new Color(0.85f, 0.65f, 0.25f);
+        block.SetColor("_BaseColor", brass);
+        block.SetFloat("_Metallic", 0.9f);
+        block.SetFloat("_Smoothness", 0.7f);
+        renderer.SetPropertyBlock(block);
+
+        Rigidbody body = casing.AddComponent<Rigidbody>();
+        body.mass = 0.01f;
+        body.linearVelocity = right * Random.Range(1.2f, 1.8f) + up * Random.Range(0.8f, 1.3f);
+        body.angularVelocity = Random.insideUnitSphere * 25f;
+        Object.Destroy(casing, 1.2f);
     }
 
     // dark stain that spreads on the floor under a fallen zombie, then fades

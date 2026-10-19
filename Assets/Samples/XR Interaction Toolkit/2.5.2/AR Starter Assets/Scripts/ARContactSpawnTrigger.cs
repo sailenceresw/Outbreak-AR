@@ -70,7 +70,7 @@ namespace UnityEngine.XR.Interaction.Toolkit.Samples.ARStarterAssets
                 print("Spawned object");
                 spawnedObject.tag = "SpawnedObject";
                 var direction = m_ObjectSpawner.cameraToFace.transform.position - spawnedObject.transform.position;
-                spawnedObject.GetComponent<Rigidbody>().velocity = direction.normalized * 1f;
+                spawnedObject.GetComponent<Rigidbody>().linearVelocity = direction.normalized * 1f;
             }
 
             

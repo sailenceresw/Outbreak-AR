@@ -113,7 +113,7 @@ public class LevelSelectMenu : MonoBehaviour
         text.color = Color.white;
         text.richText = true;
         text.raycastTarget = false;
-        text.enableWordWrapping = true;
+        text.textWrappingMode = TextWrappingModes.Normal;
         return text;
     }
 

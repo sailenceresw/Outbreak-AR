@@ -71,6 +71,8 @@ The APK is written to `Builds/Android/OutbreakAR.apk`.
 | `LevelSelectMenu` | Runtime level picker |
 | `GameHUD` | Health and ammo panels, crosshair, threat arrows, damage numbers, boss bar, banners, results card |
 | `Grenade` | Thrown grenade arc, fuse and blast callback |
+| `MissionSystem`, `PlayerProfile` | Daily missions, XP, survivor level, rewards and streak (saved on the device) |
+| `MissionBoard` | Runtime mission board screen |
 | `GameFX` / `GameAudio` | Generated particles, textures and sound effects |
 | `PowerUpPickup`, `IncreaseAmmoScript`, `IncreaseHealthScript` | Pickups |
 | `Editor/BuildAndroid` | Command-line and menu Android build |

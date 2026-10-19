@@ -40,6 +40,9 @@ public class ZombieController : MonoBehaviour
     Camera mainCamera;
     Animator animator;
     Renderer[] renderers;
+    Transform[] bones;
+    int woundCount;
+    const int MaxWounds = 6;
     MaterialPropertyBlock propertyBlock;
     BoxCollider bodyCollider;
     string moveState = "Z_Run_InPlace";
@@ -65,6 +68,34 @@ public class ZombieController : MonoBehaviour
     {
         animator = GetComponentInChildren<Animator>();
         renderers = GetComponentsInChildren<Renderer>();
+        SkinnedMeshRenderer skin = GetComponentInChildren<SkinnedMeshRenderer>();
+        bones = skin != null ? skin.bones : null;
+    }
+
+    // leave a blood mark on the body part that was hit
+    public void AddWound(Vector3 point, Vector3 shotDirection)
+    {
+        if (woundCount >= MaxWounds) return;
+        woundCount++;
+        GameFX.Wound(NearestBone(point), point, shotDirection);
+    }
+
+    Transform NearestBone(Vector3 point)
+    {
+        Transform nearest = transform;
+        if (bones == null) return nearest;
+        float best = float.MaxValue;
+        foreach (Transform bone in bones)
+        {
+            if (bone == null) continue;
+            float distance = (bone.position - point).sqrMagnitude;
+            if (distance < best)
+            {
+                best = distance;
+                nearest = bone;
+            }
+        }
+        return nearest;
     }
 
     // set up the zombie's stats and look; call right after spawning
@@ -94,6 +125,8 @@ public class ZombieController : MonoBehaviour
                 damagePerSecond = 8f;
                 knockbackDistance = 0.25f;
                 ScoreValue = 150;
+                // pale, bloodless skin sets runners apart from walkers
+                baseTint = new Color(0.82f, 0.86f, 0.8f, 1f);
                 break;
             case ZombieType.Brute:
                 DisplayName = "Brute";
@@ -106,6 +139,8 @@ public class ZombieController : MonoBehaviour
                 knockbackDistance = 0.03f;
                 attackRange = 1.1f;
                 ScoreValue = 300;
+                // bruised, darker flesh for the heavy brutes
+                baseTint = new Color(0.72f, 0.62f, 0.58f, 1f);
                 break;
             case ZombieType.Boss:
                 DisplayName = finalBoss ? "THE ABOMINATION" : "THE BRUTE KING";

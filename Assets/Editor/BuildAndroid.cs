@@ -12,6 +12,9 @@ public static class BuildAndroid
     [MenuItem("Build/Android APK")]
     public static void Build()
     {
+        // keep the zombie materials on the full Lit shader; safe to run every build
+        ZombieMaterialUpgrade.Upgrade();
+
         string[] scenes = EditorBuildSettings.scenes
             .Where(scene => scene.enabled)
             .Select(scene => scene.path)

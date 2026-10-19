@@ -665,7 +665,7 @@ public class GameHUD : MonoBehaviour
         text.color = Color.white;
         text.raycastTarget = false;
         text.richText = true;
-        text.enableWordWrapping = true;
+        text.textWrappingMode = TextWrappingModes.Normal;
         foreach (Transform child in text.transform) Destroy(child.gameObject);
         return text;
     }

@@ -153,6 +153,14 @@ public class GameControllerScript : MonoBehaviour
     float nextGrenadeTime;
     GameObject activeAmmoPickup;
 
+    // gun sway
+    Vector3 lastCameraEuler;
+    Vector2 swayAngles;
+
+    // pause during fights, home after a run
+    GameObject pauseButton;
+    GameObject homeButton;
+
     // missions and survivor level
     GameObject missionsButton;
     TMP_Text missionsButtonLabel;
@@ -295,6 +303,13 @@ public class GameControllerScript : MonoBehaviour
             playerHealthText.text = string.Empty;
             if (ammoCountText != null) ammoCountText.text = string.Empty;
         }
+        // realistic look: room lighting, floor shadows and the horror grade
+        ARLighting.Attach(mainCamera, ZombieController.CameraHeightAboveFloor);
+        PostFX.Create(mainCamera);
+        StyleSceneButtons();
+        CreatePauseButton();
+        CreateHomeButton();
+
         RefreshXP();
         RefreshHud();
         if (streakBonus > 0)
@@ -325,6 +340,13 @@ public class GameControllerScript : MonoBehaviour
         // the missions button lives on the menu screens, never mid-fight
         bool onMenu = State == GameState.Intro || State == GameState.Scanning || State == GameState.Lost || State == GameState.Won;
         SetActiveSafe(missionsButton, onMenu && !missionBoardOpen);
+
+        // pause during fights, home once the run is over
+        bool inFight = State == GameState.Playing || State == GameState.LevelIntro;
+        SetActiveSafe(pauseButton, inFight && !PauseMenu.IsOpen);
+        SetActiveSafe(homeButton, (State == GameState.Lost || State == GameState.Won) && !missionBoardOpen);
+        if (inFight && !PauseMenu.IsOpen && !missionBoardOpen && PauseMenu.ClosedFrame != Time.frameCount
+            && PauseMenu.BackPressed()) OpenPauseMenu();
 
         UpdateGunRecoil();
         UpdateTension();
@@ -592,6 +614,10 @@ public class GameControllerScript : MonoBehaviour
     // retry the current level in place, so the player doesn't have to rescan the room
     void RetryLevel()
     {
+        // also used from the pause menu mid-fight, so stop the level intro and horde routines
+        StopAllCoroutines();
+        hordeActive = false;
+
         foreach (ZombieController zombie in aliveZombies)
         {
             if (zombie != null) Destroy(zombie.gameObject);
@@ -1011,6 +1037,9 @@ public class GameControllerScript : MonoBehaviour
             ? gunTransform.position + cameraTransform.forward * 0.25f
             : cameraTransform.position + cameraTransform.forward * 0.4f;
         GameFX.MuzzleFlash(muzzle, cameraTransform.forward, shotgun);
+        GameFX.FlashLight(muzzle, new Color(1f, 0.75f, 0.4f), shotgun ? 5f : 3f, shotgun ? 4f : 3f, 0.06f);
+        GameFX.ShellCasing(muzzle - cameraTransform.forward * 0.15f + cameraTransform.right * 0.03f,
+            cameraTransform.right, cameraTransform.up, shotgun);
 
         bool hitZombie;
         if (shotgun)
@@ -1120,6 +1149,7 @@ public class GameControllerScript : MonoBehaviour
     void ApplyHit(ZombieController zombie, float damage, Vector3 point, Vector3 direction, bool headshot)
     {
         damageSource = CurrentWeapon == WeaponType.Shotgun ? DamageSource.Shotgun : DamageSource.Pistol;
+        zombie.AddWound(point, direction);
         bool killed = zombie.TakeDamage(damage, direction);
         damageSource = DamageSource.Other;
         if (headshot && State == GameState.Playing)
@@ -1212,6 +1242,7 @@ public class GameControllerScript : MonoBehaviour
             // closer blasts shake harder
             float playerDistance = Vector3.Distance(FloorUnderPlayer(), center);
             hud.Shake(Mathf.Lerp(18f, 6f, Mathf.InverseLerp(1.5f, 8f, playerDistance)));
+            if (PostFX.Instance != null) PostFX.Instance.Jolt(Mathf.Lerp(0.9f, 0.35f, Mathf.InverseLerp(1.5f, 8f, playerDistance)));
         }
         if (State != GameState.Playing) return;
 
@@ -1321,7 +1352,7 @@ public class GameControllerScript : MonoBehaviour
         if (body != null)
         {
             body.useGravity = false;
-            body.velocity = direction.normalized * bulletSpeed;
+            body.linearVelocity = direction.normalized * bulletSpeed;
         }
         Destroy(bullet, Mathf.Min(direction.magnitude / bulletSpeed, 3f));
     }
@@ -1332,6 +1363,7 @@ public class GameControllerScript : MonoBehaviour
 
         PlayerHealth = Mathf.Max(PlayerHealth - amount, 0f);
         if (hud != null) hud.FlashDamage(0.45f);
+        if (PostFX.Instance != null) PostFX.Instance.Jolt(0.2f);
 
 #if UNITY_ANDROID || UNITY_IOS
         if (Time.time >= nextHapticTime)
@@ -1348,6 +1380,7 @@ public class GameControllerScript : MonoBehaviour
     void UpdateTension()
     {
         float lowHealth = State == GameState.Playing ? 1f - PlayerHealth / (maxPlayerHealth * 0.35f) : 0f;
+        if (PostFX.Instance != null) PostFX.Instance.SetDanger(Mathf.Clamp01(1f - PlayerHealth / (maxPlayerHealth * 0.5f)) * (State == GameState.Playing ? 1f : 0f));
         if (hud != null)
         {
             hud.SetLowHealth(lowHealth);
@@ -1428,6 +1461,96 @@ public class GameControllerScript : MonoBehaviour
         SetActiveSafe(shootButton, true);
         if (hud != null) hud.SetCrosshairWide(CurrentWeapon == WeaponType.Shotgun);
         StartCoroutine(BeginLevel(index, false));
+    }
+
+    // ---------- Pause and home ----------
+
+    void OpenPauseMenu()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        if (canvas == null || PauseMenu.IsOpen) return;
+
+        GameAudio.Play(GameAudio.DryFire, 0.6f, 0.9f);
+        PauseMenu.Show(canvas.rootCanvas, playerHealthText, "Level " + (currentLevelIndex + 1) + ": " + level.title,
+            null, RetryLevel, OpenMissionBoard, GoHome);
+    }
+
+    // back to the welcome screen; the run is abandoned
+    void GoHome()
+    {
+        carriedScore = 0;
+        carriedAmmo = 0;
+        carriedShells = 0;
+        carriedGrenades = 0;
+        carriedKills = carriedShotsFired = carriedShotsHit = 0;
+        continuingChapter = false;
+        pendingStartLevel = -1;
+        GameProgress.SubmitHighScore(Score);
+        StartCoroutine(LoadSceneWithFade(0));
+    }
+
+    // top-right under the ammo panel during fights
+    void CreatePauseButton()
+    {
+        RectTransform parent = CanvasRoot();
+        if (parent == null) return;
+        Button button = UIStyle.NewButton(parent, playerHealthText, "II", UIStyle.Steel, 30f, OpenPauseMenu);
+        RectTransform rect = (RectTransform)button.transform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 1f);
+        rect.sizeDelta = new Vector2(84f, 84f);
+        rect.anchoredPosition = new Vector2(-18f, -118f);
+        pauseButton = button.gameObject;
+        pauseButton.SetActive(false);
+    }
+
+    // above the missions button on the death and victory screens
+    void CreateHomeButton()
+    {
+        RectTransform parent = CanvasRoot();
+        if (parent == null) return;
+        Button button = UIStyle.NewButton(parent, playerHealthText, "HOME", UIStyle.Blood, 28f, GoHome);
+        RectTransform rect = (RectTransform)button.transform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+        rect.sizeDelta = new Vector2(300f, 90f);
+        rect.anchoredPosition = new Vector2(0f, 170f);
+        homeButton = button.gameObject;
+        homeButton.SetActive(false);
+    }
+
+    RectTransform CanvasRoot()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        return canvas != null ? (RectTransform)canvas.rootCanvas.transform : null;
+    }
+
+    // replace the template's flat ellipse buttons and black bands with the game's style
+    void StyleSceneButtons()
+    {
+        StyleButtonObject(shootButton, UIStyle.Blood);
+        StyleButtonObject(swapButton, UIStyle.Steel);
+        StyleButtonObject(grenadeButton, UIStyle.Toxic);
+        StyleButtonObject(missionsButton, UIStyle.Gold);
+
+        foreach (GameObject prompt in new[] { greetingPrompt, scanPrompt, youLostPrompt, youWonPrompt })
+        {
+            if (prompt == null) continue;
+            foreach (Button button in prompt.GetComponentsInChildren<Button>(true)) UIStyle.StyleButton(button, UIStyle.Toxic);
+            foreach (Image image in prompt.GetComponentsInChildren<Image>(true))
+            {
+                // dark backing panels, not the buttons we just styled
+                if (image.GetComponentInParent<Button>() != null) continue;
+                if (image.color.a > 0.5f && image.color.maxColorComponent < 0.2f)
+                {
+                    image.color = new Color(0.04f, 0.05f, 0.04f, 0.85f);
+                }
+            }
+        }
+    }
+
+    static void StyleButtonObject(GameObject target, Color accent)
+    {
+        if (target == null) return;
+        UIStyle.StyleButton(target.GetComponent<Button>(), accent);
     }
 
     // ---------- Missions and survivor level ----------
@@ -1646,7 +1769,19 @@ public class GameControllerScript : MonoBehaviour
     void UpdateGunRecoil()
     {
         if (gunTransform == null) return;
-        gunTransform.localRotation = Quaternion.Slerp(gunTransform.localRotation, gunRestRotation, Time.deltaTime * 15f);
+        // the gun trails the view a little when turning and breathes at rest
+        Quaternion sway = Quaternion.identity;
+        if (mainCamera != null && Time.deltaTime > 0f)
+        {
+            Vector3 euler = mainCamera.transform.eulerAngles;
+            float yaw = Mathf.DeltaAngle(lastCameraEuler.y, euler.y);
+            float pitch = Mathf.DeltaAngle(lastCameraEuler.x, euler.x);
+            lastCameraEuler = euler;
+            swayAngles = Vector2.Lerp(swayAngles, new Vector2(Mathf.Clamp(pitch * 0.6f, -5f, 5f), Mathf.Clamp(-yaw * 0.6f, -5f, 5f)), Time.deltaTime * 8f);
+            float breath = Mathf.Sin(Time.time * 1.6f) * 0.6f;
+            sway = Quaternion.Euler(swayAngles.x + breath, swayAngles.y, swayAngles.y * 0.6f);
+        }
+        gunTransform.localRotation = Quaternion.Slerp(gunTransform.localRotation, gunRestRotation * sway, Time.deltaTime * 15f);
     }
 
     // ---------- Scene flow ----------
