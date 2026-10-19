@@ -26,6 +26,8 @@ public class GameControllerScript : MonoBehaviour
     static bool continuingChapter;
     // level picked in the level select that lives in another scene
     static int pendingStartLevel = -1;
+    // a fight started from an outbreak site on the map, picked up by the next scene load
+    static SiteEncounter pendingEncounter;
 
     [Header("Prefabs")]
     public GameObject bulletPrefab;
@@ -75,6 +77,10 @@ public class GameControllerScript : MonoBehaviour
     public float grenadeDamage = 320f;
     public float grenadeFlightTime = 0.75f;
     public Vector2 grenadeThrowRange = new Vector2(1.5f, 9f);
+
+    [Header("Catching")]
+    // chance a catchable zombie spawns as a glowing mutant (map sites raise it)
+    public float mutantChance = 0.04f;
 
     [Header("Pickups")]
     public float pickupSpawnInterval = 20f;
@@ -141,6 +147,16 @@ public class GameControllerScript : MonoBehaviour
     GameObject grenadeButton;
     TMP_Text grenadeButtonLabel;
     float nextGrenadeTime;
+
+    // catching
+    GameObject trapButton;
+    TMP_Text trapButtonLabel;
+    float nextTrapTime;
+    // the zombie under the crosshair, which a trap is thrown at
+    ZombieController aimedZombie;
+
+    // the current fight is a map site rather than a campaign level
+    SiteEncounter encounter;
     GameObject activeAmmoPickup;
 
     // gun sway
@@ -247,6 +263,15 @@ public class GameControllerScript : MonoBehaviour
         LoadEquippedWeapons();
         StartAmbience();
 
+        // a map site fight replaces the campaign level, at the player's current campaign strength
+        encounter = pendingEncounter;
+        pendingEncounter = null;
+        if (encounter != null)
+        {
+            pendingStartLevel = Mathf.Max(GameProgress.UnlockedLevel, firstLevel);
+            continuingChapter = false;
+        }
+
         bool fromLevelSelect = pendingStartLevel >= 0;
         startLevelIndex = fromLevelSelect ? pendingStartLevel : firstLevel;
 
@@ -279,6 +304,7 @@ public class GameControllerScript : MonoBehaviour
 
         CreateSwapButton();
         CreateGrenadeButton();
+        CreateTrapButton();
         CreateMissionsButton();
         SetActiveSafe(shootButton, false);
         // the home screen replaces the template's greeting panel
@@ -365,7 +391,7 @@ public class GameControllerScript : MonoBehaviour
     IEnumerator BeginLevel(int index, bool isRetry)
     {
         currentLevelIndex = index;
-        level = LevelCatalog.Get(index);
+        level = encounter != null ? encounter.level : LevelCatalog.Get(index);
         State = GameState.LevelIntro;
         SetPlanesVisible(false);
         // the HUD is hidden on the scan screen; it has to be live before the level banner starts
@@ -386,7 +412,8 @@ public class GameControllerScript : MonoBehaviour
         SetActiveSafe(swapButton, heavyUnlocked);
         GrenadeCount = Mathf.Max(GrenadeCount, grenadesPerLevel + PlayerProfile.BonusGrenades);
         SetActiveSafe(grenadeButton, true);
-        GameProgress.Unlock(index);
+        SetActiveSafe(trapButton, true);
+        if (encounter == null) GameProgress.Unlock(index);
 
         // shop items kick in at the start of a level (not on a retry, so they aren't wasted twice)
         string itemNote = isRetry ? string.Empty : UseLevelStartItems();
@@ -409,7 +436,7 @@ public class GameControllerScript : MonoBehaviour
             hud.SetCrosshairVisible(true);
             hud.HideBoss();
             hud.SetObjective(string.Empty);
-            hud.ShowBanner("LEVEL " + (index + 1) + ": " + level.title.ToUpper(),
+            hud.ShowBanner(encounter != null ? level.title.ToUpper() : "LEVEL " + (index + 1) + ": " + level.title.ToUpper(),
                 "<color=#9A9A9A>" + level.chapter + "</color>\n" + level.story +
                 "\n\n<color=#FFC832>" + ObjectiveDescription() + "</color>" +
                 (newWeapon ? "\n<color=#FF8C32>NEW WEAPON: " + heavy.name.ToUpper() + "  -  tap SWAP</color>" : "") +
@@ -435,6 +462,7 @@ public class GameControllerScript : MonoBehaviour
             case LevelObjective.Survive:
                 return "Survive for " + Mathf.RoundToInt(level.surviveSeconds) + " seconds";
             case LevelObjective.Boss:
+                if (encounter != null) return "Destroy the nest's guardian";
                 return "Defeat " + (LevelCatalog.IsFinalBoss(currentLevelIndex) ? "the Abomination" : "the Brute King");
             default:
                 return "Eliminate " + level.zombieCount + " zombies";
@@ -512,6 +540,12 @@ public class GameControllerScript : MonoBehaviour
         // the final kill plays out in slow motion
         PlayTimeEffect(0.3f, 1.3f);
 
+        if (encounter != null)
+        {
+            yield return SiteClearedSequence();
+            yield break;
+        }
+
         // whatever is still standing collapses with the level
         foreach (ZombieController zombie in aliveZombies.ToArray())
         {
@@ -574,6 +608,7 @@ public class GameControllerScript : MonoBehaviour
         SetActiveSafe(shootButton, false);
         SetActiveSafe(swapButton, false);
         SetActiveSafe(grenadeButton, false);
+        SetActiveSafe(trapButton, false);
         if (hud != null)
         {
             hud.SetCrosshairVisible(false);
@@ -606,6 +641,7 @@ public class GameControllerScript : MonoBehaviour
         SetActiveSafe(shootButton, false);
         SetActiveSafe(swapButton, false);
         SetActiveSafe(grenadeButton, false);
+        SetActiveSafe(trapButton, false);
         SetActiveSafe(gun, false);
         SetActiveSafe(youLostPrompt, true);
         if (hud != null)
@@ -796,7 +832,12 @@ public class GameControllerScript : MonoBehaviour
             if (type == ZombieType.Runner) model = runnerModel;
             else if (type == ZombieType.Brute || type == ZombieType.Boss) model = bruteModel;
         }
-        zombie.Configure(type, level.speedMultiplier, model, LevelCatalog.IsFinalBoss(currentLevelIndex));
+        zombie.Configure(type, level.speedMultiplier, model, encounter == null && LevelCatalog.IsFinalBoss(currentLevelIndex));
+
+        // rare glowing mutants of the catchable kinds; map sites are where they gather
+        float chance = encounter != null ? encounter.mutantChance : mutantChance;
+        if (ZombieDex.Get(type).catchable && Random.value < chance) zombie.MakeMutant();
+        ZombieDex.RecordSeen(type);
 
         aliveZombies.Add(zombie);
         if (countsTowardLevel) zombiesSpawned++;
@@ -1383,17 +1424,34 @@ public class GameControllerScript : MonoBehaviour
     {
         if (hud == null) return;
         bool onTarget = false;
+        aimedZombie = null;
         if (State == GameState.Playing && mainCamera != null)
         {
+            // traps reach further than a shotgun, so look the full distance and check gun range separately
             Ray ray = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
-            float range = ActiveWeapon.range;
-            if (CastShot(ray, range, out RaycastHit hit))
+            if (CastShot(ray, 30f, out RaycastHit hit))
             {
                 ZombieController zombie = hit.collider.GetComponentInParent<ZombieController>();
-                onTarget = zombie != null && !zombie.IsDead;
+                if (zombie != null && !zombie.IsDead)
+                {
+                    aimedZombie = zombie;
+                    onTarget = hit.distance <= ActiveWeapon.range;
+                }
             }
         }
         hud.SetAimOnTarget(onTarget);
+
+        // the catch chance under the crosshair, like a capture ring
+        string hint = string.Empty;
+        if (aimedZombie != null && !aimedZombie.IsBeingCaptured && Inventory.Count(ItemId.Trap) > 0)
+        {
+            if (ZombieDex.Get(aimedZombie.Type).catchable)
+            {
+                int percent = Mathf.RoundToInt(100f * ZombieDex.CatchChance(aimedZombie.Type, aimedZombie.IsMutant, aimedZombie.HealthFraction));
+                hint = (aimedZombie.IsMutant ? "<color=#C080FF>MUTANT</color>  " : string.Empty) + "TRAP " + percent + "%";
+            }
+        }
+        hud.SetCatchHint(hint);
     }
 
     // nearest hit along the shot, ignoring the gun model and tracers
@@ -1625,7 +1683,7 @@ public class GameControllerScript : MonoBehaviour
         if (homeScreen == null)
         {
             homeScreen = HomeScreen.Show(canvas.rootCanvas, playerHealthText,
-                () => ChooseLevel(GameProgress.UnlockedLevel), ShowLevelPicker, OpenMissionBoard, OpenShop);
+                () => ChooseLevel(GameProgress.UnlockedLevel), OpenMap, ShowLevelPicker, OpenMissionBoard, OpenShop, OpenDex);
         }
         homeScreen.SetVisible(true);
     }
@@ -1635,6 +1693,23 @@ public class GameControllerScript : MonoBehaviour
         Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
         if (canvas == null) return;
         LevelSelectMenu.Show(canvas.rootCanvas, playerHealthText, ChooseLevel);
+    }
+
+    void OpenMap()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        if (canvas == null) return;
+        MapScreen.Show(canvas.rootCanvas, playerHealthText, StartEncounter, () =>
+        {
+            if (homeScreen != null) homeScreen.Refresh();
+        });
+    }
+
+    void OpenDex()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        if (canvas == null) return;
+        DexMenu.Show(canvas.rootCanvas, playerHealthText, null);
     }
 
     void OpenShop()
@@ -1675,6 +1750,127 @@ public class GameControllerScript : MonoBehaviour
         foreach (TMP_Text text in playerHealthText.canvas.rootCanvas.GetComponentsInChildren<TMP_Text>(true))
         {
             if (text.font != font) text.font = font;
+        }
+    }
+
+    // ---------- Catching ----------
+
+    public void ThrowTrap()
+    {
+        if (State != GameState.Playing || mainCamera == null || Time.time < nextTrapTime) return;
+        if (Inventory.Count(ItemId.Trap) <= 0)
+        {
+            GameAudio.Play(GameAudio.DryFire, 0.8f, 1.3f);
+            ShowMessage("No traps left! Get more in the shop");
+            return;
+        }
+
+        ZombieController target = aimedZombie;
+        if (target == null || target.IsDead || target.IsBeingCaptured)
+        {
+            ShowMessage("Aim at a zombie, then throw");
+            return;
+        }
+        if (!ZombieDex.Get(target.Type).catchable)
+        {
+            ShowMessage("Too strong to trap!", 1.2f, new Color(1f, 0.4f, 0.3f));
+            return;
+        }
+
+        Inventory.Use(ItemId.Trap);
+        nextTrapTime = Time.time + 1.2f;
+        float chance = ZombieDex.CatchChance(target.Type, target.IsMutant, target.HealthFraction);
+        Transform view = mainCamera.transform;
+        CaptureTrap.Throw(view.position + view.forward * 0.3f - view.up * 0.15f, target, chance, OnTrapResult);
+    }
+
+    void OnTrapResult(ZombieController zombie, bool caught)
+    {
+        if (zombie == null) return;
+        if (caught)
+        {
+            OnZombieCaptured(zombie);
+            return;
+        }
+
+        if (zombie.IsDead)
+        {
+            // the target died before the trap landed; don't waste it
+            Inventory.Add(ItemId.Trap, 1);
+            return;
+        }
+        zombie.BreakFree();
+        ShowMessage("BROKE FREE!\n<size=70%>Weaken it more first</size>", 1.4f, new Color(1f, 0.4f, 0.3f));
+    }
+
+    void OnZombieCaptured(ZombieController zombie)
+    {
+        zombie.CompleteCapture(zombie.transform.position);
+        aliveZombies.Remove(zombie);
+
+        bool first = ZombieDex.RecordCaught(zombie.Type, zombie.IsMutant);
+        int xp = ZombieDex.CatchXP(zombie.Type, zombie.IsMutant);
+        if (State == GameState.Playing)
+        {
+            // a catch takes the zombie out of the fight just like a kill
+            ZombiesKilled++;
+            AddScore(zombie.ScoreValue * 2);
+        }
+
+        MissionSystem.Report(MissionType.CatchZombies);
+        if (zombie.IsMutant || zombie.Type == ZombieType.Spitter || zombie.Type == ZombieType.Brute)
+        {
+            MissionSystem.Report(MissionType.CatchRare);
+        }
+        AwardXP(xp);
+
+        GameAudio.Play(GameAudio.Fanfare, 0.7f, 1.3f);
+        string title = first ? (zombie.IsMutant ? "NEW MUTANT!" : "NEW DEX ENTRY!") : "CAPTURED!";
+        ShowMessage(title + "\n<size=70%>" + zombie.DisplayName + "  +" + xp + " XP</size>", 2.2f,
+            zombie.IsMutant ? ZombieDex.MutantColor : new Color(0.4f, 0.95f, 1f));
+    }
+
+    // ---------- Map site encounters ----------
+
+    // start a fight at an outbreak site: reload the scene so it opens straight on the room scan
+    public void StartEncounter(SiteEncounter siteEncounter)
+    {
+        pendingEncounter = siteEncounter;
+        StartCoroutine(LoadSceneWithFade(SceneManager.GetActiveScene().buildIndex));
+    }
+
+    IEnumerator SiteClearedSequence()
+    {
+        foreach (ZombieController zombie in aliveZombies.ToArray())
+        {
+            if (zombie != null) zombie.Collapse();
+        }
+        aliveZombies.Clear();
+        GameAudio.Play(GameAudio.Fanfare, 0.9f);
+
+        MapSites.MarkCleared(encounter.siteId);
+        MissionSystem.Report(MissionType.ClearSites);
+        PlayerProfile.AddSupply(encounter.rewardSupply);
+        if (encounter.rewardTraps > 0) Inventory.Add(ItemId.Trap, encounter.rewardTraps);
+        AwardXP(encounter.rewardXP);
+        GameProgress.SubmitHighScore(Score);
+
+        yield return new WaitForSecondsRealtime(1.3f);
+
+        State = GameState.Won;
+        SetActiveSafe(shootButton, false);
+        SetActiveSafe(swapButton, false);
+        SetActiveSafe(grenadeButton, false);
+        SetActiveSafe(trapButton, false);
+        if (hud != null)
+        {
+            hud.HideBoss();
+            hud.SetObjective(string.Empty);
+            hud.SetCrosshairVisible(false);
+            hud.ShowBanner(encounter.nest ? "NEST DESTROYED" : "SITE CLEARED",
+                "<color=#FFC832>+" + encounter.rewardSupply + " SP</color>   <color=#5AB4FF>+" + encounter.rewardXP + " XP</color>" +
+                (encounter.rewardTraps > 0 ? "\n<color=#66E6FF>+" + encounter.rewardTraps + " traps</color>" : string.Empty) +
+                "\n\n<size=80%><color=#999999>Tap HOME to return</color></size>", 0f);
         }
     }
 
@@ -1744,6 +1940,7 @@ public class GameControllerScript : MonoBehaviour
         StyleButtonObject(shootButton, UIStyle.Blood);
         StyleButtonObject(swapButton, UIStyle.Steel);
         StyleButtonObject(grenadeButton, UIStyle.Toxic);
+        StyleButtonObject(trapButton, new Color(0.3f, 0.9f, 1f));
         StyleButtonObject(missionsButton, UIStyle.Gold);
 
         foreach (GameObject prompt in new[] { greetingPrompt, scanPrompt, youLostPrompt, youWonPrompt })
@@ -1846,6 +2043,13 @@ public class GameControllerScript : MonoBehaviour
         }
     }
 
+    // above the grenade button: throws a containment trap at the zombie under the crosshair
+    void CreateTrapButton()
+    {
+        trapButton = CloneShootButton("TrapButton", ThrowTrap, new Vector2(0f, 0f),
+            new Vector2(20f, 145f), new Vector2(160f, 76f), "TRAP", out trapButtonLabel);
+    }
+
     // extra buttons are cloned from the shoot button so they match the scene's style
     GameObject CloneShootButton(string name, UnityEngine.Events.UnityAction onClick, Vector2 corner,
         Vector2 position, Vector2 size, string text, out TMP_Text label)
@@ -1940,6 +2144,12 @@ public class GameControllerScript : MonoBehaviour
         {
             grenadeButtonLabel.text = "GRENADE  " + GrenadeCount;
             grenadeButtonLabel.alpha = GrenadeCount > 0 ? 1f : 0.45f;
+        }
+        if (trapButtonLabel != null && trapButton != null && trapButton.activeSelf)
+        {
+            int traps = Inventory.Count(ItemId.Trap);
+            trapButtonLabel.text = "TRAP  " + traps;
+            trapButtonLabel.alpha = traps > 0 ? 1f : 0.45f;
         }
 
         if (infoText != null && Time.time >= infoMessageUntil)

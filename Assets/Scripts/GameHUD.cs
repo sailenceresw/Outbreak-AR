@@ -58,6 +58,7 @@ public class GameHUD : MonoBehaviour
     TMP_Text roundsText;
     TMP_Text grenadeText;
     TMP_Text calloutText;
+    TMP_Text catchHint;
     float calloutStart = -10f;
     float calloutUntil;
     readonly List<DamageNumber> damageNumbers = new List<DamageNumber>();
@@ -200,6 +201,13 @@ public class GameHUD : MonoBehaviour
         bannerBody.rectTransform.anchorMax = new Vector2(1f, 0.5f);
         bannerBody.rectTransform.offsetMin = new Vector2(16f, 0f);
         bannerBody.rectTransform.offsetMax = new Vector2(-16f, -8f);
+
+        catchHint = NewText(template, "CatchHint", 20f, TextAlignmentOptions.Center, root);
+        catchHint.rectTransform.anchorMin = catchHint.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        catchHint.rectTransform.sizeDelta = new Vector2(400f, 30f);
+        catchHint.rectTransform.anchoredPosition = new Vector2(0f, -60f);
+        catchHint.color = new Color(0.4f, 0.95f, 1f);
+        catchHint.fontStyle = FontStyles.Bold;
 
         // short call-outs like HEADSHOT! pop up above the crosshair
         calloutText = NewText(template, "Callout", 34f, TextAlignmentOptions.Center, root);
@@ -528,6 +536,12 @@ public class GameHUD : MonoBehaviour
     public void SetAimOnTarget(bool onTarget)
     {
         aimOnTarget = onTarget;
+    }
+
+    // "TRAP 62%" under the crosshair while aiming at a catchable zombie; empty hides it
+    public void SetCatchHint(string hint)
+    {
+        if (catchHint.text != hint) catchHint.text = hint;
     }
 
     public void ShowResults(string title, Color titleColor, string body)

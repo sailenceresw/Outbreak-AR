@@ -118,9 +118,19 @@ public static class PlayerProfile
     // call once per session; returns the bonus XP awarded (on every 7th day in a row)
     public static int RegisterPlayToday()
     {
+        // a starter set of traps once, whenever the player first runs a version with catching
+        if (PlayerPrefs.GetInt("Profile_StarterTraps", 0) == 0)
+        {
+            PlayerPrefs.SetInt("Profile_StarterTraps", 1);
+            Inventory.Add(ItemId.Trap, 5);
+        }
+
         string today = DateKey(DateTime.Now);
         string last = PlayerPrefs.GetString(LastPlayKey, string.Empty);
         if (last == today) return 0;
+
+        // then a few free every new day played
+        Inventory.Add(ItemId.Trap, 3);
 
         int streak = last == DateKey(DateTime.Now.AddDays(-1)) ? Streak + 1 : 1;
         PlayerPrefs.SetInt(StreakKey, streak);

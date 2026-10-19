@@ -99,9 +99,10 @@ public class ARWorld : MonoBehaviour
             if (plane.alignment != PlaneAlignment.HorizontalUp) continue;
             if (plane.trackingState != TrackingState.Tracking) continue;
             float y = plane.center.y;
-            // tables and beds are higher up; the floor is well below the phone
-            if (cameraY - y < 0.6f) continue;
-            if (plane.size.x * plane.size.y < 0.25f) continue;
+            // tables and beds are higher up; the floor is clearly below the phone (held low, or seated)
+            if (cameraY - y < 0.4f) continue;
+            // ARCore starts planes small and grows them, so accept a modest patch
+            if (plane.size.x * plane.size.y < 0.08f) continue;
             if (y < best)
             {
                 best = y;

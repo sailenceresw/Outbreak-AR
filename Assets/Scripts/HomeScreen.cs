@@ -11,12 +11,14 @@ public class HomeScreen : MonoBehaviour
     TMP_Text detailText;
     TMP_Text playLabel;
     TMP_Text missionsLabel;
+    TMP_Text dexLabel;
+    TMP_Text mapLabel;
     Image xpFill;
     RectTransform root;
     GameObject settingsPanel;
 
-    public static HomeScreen Show(Canvas canvas, TMP_Text template,
-        Action onPlay, Action onLevels, Action onMissions, Action onShop)
+    public static HomeScreen Show(Canvas canvas, TMP_Text template, Action onPlay, Action onMap,
+        Action onLevels, Action onMissions, Action onShop, Action onDex)
     {
         GameObject panel = new GameObject("HomeScreen", typeof(RectTransform));
         RectTransform rect = panel.GetComponent<RectTransform>();
@@ -27,12 +29,12 @@ public class HomeScreen : MonoBehaviour
         HomeScreen home = panel.AddComponent<HomeScreen>();
         home.template = template;
         home.root = rect;
-        home.Build(onPlay, onLevels, onMissions, onShop);
+        home.Build(onPlay, onMap, onLevels, onMissions, onShop, onDex);
         home.Refresh();
         return home;
     }
 
-    void Build(Action onPlay, Action onLevels, Action onMissions, Action onShop)
+    void Build(Action onPlay, Action onMap, Action onLevels, Action onMissions, Action onShop, Action onDex)
     {
         // darken the camera behind the menu so it reads, but keep the room visible
         RawImage shade = NewShade(new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(0f, 0f, 0f, 0.55f));
@@ -70,12 +72,16 @@ public class HomeScreen : MonoBehaviour
         xpFill.color = UIStyle.XP;
         detailText = NewText(cardRect, string.Empty, 19f, FontStyles.Normal, new Vector2(0.05f, 0.06f), new Vector2(0.95f, 0.4f));
 
-        Button play = AddButton("PLAY", UIStyle.Blood, 40f, 0.49f, 0.6f, onPlay);
+        // the two ways to play first and largest, then a grid of the rest
+        Button play = AddButton("PLAY", UIStyle.Blood, 40f, 0.52f, 0.63f, onPlay);
         playLabel = play.GetComponentInChildren<TMP_Text>();
-        AddButton("LEVELS", UIStyle.Steel, 26f, 0.4f, 0.47f, onLevels);
-        missionsLabel = AddButton("MISSIONS", UIStyle.Gold, 26f, 0.315f, 0.385f, onMissions).GetComponentInChildren<TMP_Text>();
-        AddButton("SHOP", UIStyle.Toxic, 26f, 0.23f, 0.3f, onShop);
-        AddButton("SETTINGS", UIStyle.Steel, 22f, 0.155f, 0.215f, ShowSettings);
+        Button map = AddButton("WORLD MAP", UIStyle.Toxic, 30f, 0.435f, 0.51f, onMap);
+        mapLabel = map.GetComponentInChildren<TMP_Text>();
+        AddButton("LEVELS", UIStyle.Steel, 22f, 0.355f, 0.42f, onLevels, 0.12f, 0.49f);
+        missionsLabel = AddButton("MISSIONS", UIStyle.Gold, 22f, 0.355f, 0.42f, onMissions, 0.51f, 0.88f).GetComponentInChildren<TMP_Text>();
+        AddButton("SHOP", UIStyle.Gold, 22f, 0.275f, 0.34f, onShop, 0.12f, 0.49f);
+        dexLabel = AddButton("ZOMBIE-DEX", new Color(0.3f, 0.9f, 1f), 22f, 0.275f, 0.34f, onDex, 0.51f, 0.88f).GetComponentInChildren<TMP_Text>();
+        AddButton("SETTINGS", UIStyle.Steel, 20f, 0.2f, 0.255f, ShowSettings);
 
         TMP_Text hint = NewText(root, "Find a clear floor space. Zombies will rise from it.", 18f, FontStyles.Normal, new Vector2(0.05f, 0.07f), new Vector2(0.95f, 0.12f));
         hint.color = new Color(1f, 1f, 1f, 0.55f);
@@ -95,6 +101,8 @@ public class HomeScreen : MonoBehaviour
 
         int ready = MissionSystem.UnclaimedCount;
         missionsLabel.text = ready > 0 ? "MISSIONS  (" + ready + ")" : "MISSIONS";
+        dexLabel.text = "ZOMBIE-DEX  <size=80%>" + ZombieDex.SpeciesCaught + "/" + ZombieDex.CatchableSpecies + "</size>";
+        mapLabel.text = "WORLD MAP\n<size=50%><color=#DDDDDD>Walk to outbreak sites and caches</color></size>";
     }
 
     public void SetVisible(bool visible)
@@ -174,14 +182,15 @@ public class HomeScreen : MonoBehaviour
 
     // ---------- Builders ----------
 
-    Button AddButton(string label, Color accent, float size, float bottom, float top, Action onClick)
+    Button AddButton(string label, Color accent, float size, float bottom, float top, Action onClick,
+        float left = 0.12f, float right = 0.88f)
     {
         Button button = UIStyle.NewButton(root, template, label, accent, size, () =>
         {
             GameAudio.Play(GameAudio.Pickup, 0.5f, 0.9f);
             onClick?.Invoke();
         });
-        Stretch((RectTransform)button.transform, new Vector2(0.12f, bottom), new Vector2(0.88f, top));
+        Stretch((RectTransform)button.transform, new Vector2(left, bottom), new Vector2(right, top));
         TMP_Text text = button.GetComponentInChildren<TMP_Text>();
         text.richText = true;
         text.textWrappingMode = TextWrappingModes.Normal;

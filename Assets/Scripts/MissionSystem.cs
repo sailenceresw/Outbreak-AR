@@ -5,7 +5,9 @@ using UnityEngine;
 public enum MissionType
 {
     KillZombies, KillRunners, KillBrutes, Headshots, ReachCombo,
-    GrenadeKills, GrenadeMultiKill, ShotgunKills, ClearLevels, StrongFinish, CollectPickups
+    GrenadeKills, GrenadeMultiKill, ShotgunKills, ClearLevels, StrongFinish, CollectPickups,
+    // added later; kept at the end so saved mission types keep their numbers
+    CatchZombies, CatchRare, ClearSites, WalkDistance
 }
 
 // Three daily missions, picked once per day and saved with their progress on the device.
@@ -47,6 +49,13 @@ public static class MissionSystem
         new MissionInfo { type = MissionType.ShotgunKills, minTarget = 5, maxTarget = 10, xp = 150, requiresUnlockedLevel = 1, format = "Kill {0} zombies with the shotgun" },
         new MissionInfo { type = MissionType.ClearLevels, minTarget = 1, maxTarget = 3, xp = 200, format = "Clear {0} levels", singular = "Clear a level" },
         new MissionInfo { type = MissionType.StrongFinish, minTarget = 1, maxTarget = 2, xp = 250, format = "Clear {0} levels above half health", singular = "Clear a level above half health" },
+        new MissionInfo { type = MissionType.CatchZombies, minTarget = 2, maxTarget = 4, xp = 200, format = "Catch {0} zombies with traps" },
+        new MissionInfo { type = MissionType.CatchRare, minTarget = 1, maxTarget = 1, xp = 300, requiresUnlockedLevel = 2,
+            format = "Catch {0} Spitters, Brutes or mutants", singular = "Catch a Spitter, Brute or mutant" },
+        new MissionInfo { type = MissionType.ClearSites, minTarget = 1, maxTarget = 2, xp = 250,
+            format = "Clear {0} outbreak sites on the map", singular = "Clear an outbreak site on the map" },
+        new MissionInfo { type = MissionType.WalkDistance, minTarget = 5, maxTarget = 10, xp = 200,
+            format = "Walk {0}00 m with the map open" },
         new MissionInfo { type = MissionType.CollectPickups, minTarget = 2, maxTarget = 4, xp = 100, format = "Collect {0} supply drops or power-ups" },
     };
 

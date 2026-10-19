@@ -57,6 +57,11 @@ public class ZombieController : MonoBehaviour
     public int ScoreValue { get; private set; } = 100;
     public string DisplayName { get; private set; } = "Walker";
     public bool IsEnraged { get; private set; }
+    // rare glowing variant: tougher, worth more, and a Zombie-dex prize
+    public bool IsMutant { get; private set; }
+    public bool IsBeingCaptured { get; private set; }
+    public float HealthFraction => MaxHealth > 0f ? Mathf.Clamp01(zombieHealth / MaxHealth) : 0f;
+    float rageUntil;
 
     Camera mainCamera;
     Animator animator;
@@ -431,9 +436,72 @@ public class ZombieController : MonoBehaviour
         isRising = false;
     }
 
+    // ---------- Mutants and capture ----------
+
+    public void MakeMutant()
+    {
+        if (IsBoss || IsMutant) return;
+        IsMutant = true;
+        DisplayName = "Mutant " + DisplayName;
+        MaxHealth *= 1.5f;
+        zombieHealth = MaxHealth;
+        ScoreValue *= 2;
+        baseTint = new Color(0.82f, 0.6f, 1f, 1f);
+        SetTint(baseTint);
+        // a violet shimmer so mutants stand out across the room
+        ParticleSystem glow = GameFX.Aura(transform, ZombieDex.MutantColor);
+        glow.transform.localPosition = Vector3.up * 1.1f;
+        ParticleSystem.ShapeModule shape = glow.shape;
+        shape.radius = 0.35f;
+    }
+
+    // pinned by a trap: stop moving and attacking until the trap decides
+    public void BeginCapture()
+    {
+        IsBeingCaptured = true;
+        attackReadyTime = -1f;
+        currentAnimState = null;
+        PlayAnim(HitReactState);
+        SetTint(new Color(0.55f, 0.95f, 1f, 1f));
+    }
+
+    // broke out: furious for a few seconds
+    public void BreakFree()
+    {
+        IsBeingCaptured = false;
+        rageUntil = Time.time + 3f;
+        SetTint(baseTint);
+        Groan(Random.Range(1.1f, 1.3f));
+    }
+
+    // caught: shrink into the trap and vanish
+    public void CompleteCapture(Vector3 trapPosition)
+    {
+        if (isDead) return;
+        isDead = true;
+        IsBeingCaptured = false;
+        foreach (Collider c in GetComponentsInChildren<Collider>()) c.enabled = false;
+        if (zombieAudioSource != null) zombieAudioSource.Stop();
+        StartCoroutine(ShrinkInto(trapPosition));
+    }
+
+    IEnumerator ShrinkInto(Vector3 point)
+    {
+        Vector3 startScale = transform.localScale;
+        Vector3 startPosition = transform.position;
+        for (float t = 0f; t < 0.45f; t += Time.deltaTime)
+        {
+            float k = t / 0.45f;
+            transform.localScale = Vector3.Lerp(startScale, Vector3.zero, k * k);
+            transform.position = Vector3.Lerp(startPosition, point, k);
+            yield return null;
+        }
+        Destroy(gameObject);
+    }
+
     void Update()
     {
-        if (isDead || isRising) return;
+        if (isDead || isRising || IsBeingCaptured) return;
         if (mainCamera == null)
         {
             mainCamera = Camera.main;
@@ -530,7 +598,8 @@ public class ZombieController : MonoBehaviour
             if (Time.time >= staggerUntil)
             {
                 PlayAnim(moveState);
-                float speed = zombieSpeed * timeScale * (IsEnraged ? 1.6f : 1f);
+                bool raging = IsEnraged || Time.time < rageUntil;
+                float speed = zombieSpeed * timeScale * (raging ? 1.6f : 1f);
                 position += ApproachDirection(flatOffset, distance) * speed * Time.deltaTime;
                 UpdateFootsteps(timeScale);
             }

@@ -112,6 +112,13 @@ public static class Arsenal
         PlayerPrefs.Save();
     }
 
+    // a gun found at a rare cache: owned for free, equipped from the shop like any other
+    public static void Grant(WeaponId id)
+    {
+        PlayerPrefs.SetInt(OwnedPrefix + id, 1);
+        PlayerPrefs.Save();
+    }
+
     public static bool Buy(WeaponId id)
     {
         WeaponDefinition weapon = Get(id);

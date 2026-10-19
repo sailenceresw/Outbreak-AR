@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public enum ItemId { GrenadePack, Adrenaline, AmmoCache }
+public enum ItemId { GrenadePack, Adrenaline, AmmoCache, Trap }
 
 public class ShopItem
 {
@@ -16,6 +16,8 @@ public static class Inventory
 {
     static readonly ShopItem[] Catalog =
     {
+        new ShopItem { id = ItemId.Trap, name = "Containment Trap", cost = 100, maxStack = 20,
+            description = "Throw at a weakened zombie to catch it for your Zombie-dex." },
         new ShopItem { id = ItemId.GrenadePack, name = "Grenade Pack", cost = 250, maxStack = 5,
             description = "+2 grenades at the start of your next level." },
         new ShopItem { id = ItemId.Adrenaline, name = "Adrenaline Shot", cost = 600, maxStack = 3,
