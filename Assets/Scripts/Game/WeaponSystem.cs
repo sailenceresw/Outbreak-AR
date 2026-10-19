@@ -42,6 +42,13 @@ public class WeaponSystem : GameSystem
     Vector3 lastCameraEuler;
     Vector2 swayAngles;
 
+    // the scene's pistol model, hidden while another gun's model is held
+    Renderer[] sceneGunRenderers = new Renderer[0];
+    bool[] sceneGunRendererWasOn = new bool[0];
+    readonly Dictionary<WeaponId, GameObject> heldModels = new Dictionary<WeaponId, GameObject>();
+    readonly Dictionary<WeaponId, Vector3> heldMuzzles = new Dictionary<WeaponId, Vector3>();
+    WeaponId? shownWeapon;
+
     protected override void OnBind()
     {
         if (Game.gun != null)
@@ -49,6 +56,9 @@ public class WeaponSystem : GameSystem
             gunAudioSource = Game.gun.GetComponent<AudioSource>();
             gunTransform = Game.gun.transform;
             gunRestRotation = gunTransform.localRotation;
+            sceneGunRenderers = Game.gun.GetComponentsInChildren<Renderer>(true);
+            sceneGunRendererWasOn = new bool[sceneGunRenderers.Length];
+            for (int i = 0; i < sceneGunRenderers.Length; i++) sceneGunRendererWasOn[i] = sceneGunRenderers[i].enabled;
         }
         Flow.StateChanged += state =>
         {
@@ -235,9 +245,9 @@ public class WeaponSystem : GameSystem
         }
 
         bool big = weapon.pellets > 1 || weapon.damage >= 100f;
-        Vector3 muzzle = gunTransform != null
-            ? gunTransform.position + cameraTransform.forward * 0.25f
-            : cameraTransform.position + cameraTransform.forward * 0.4f;
+        Vector3 muzzle = gunTransform == null ? cameraTransform.position + cameraTransform.forward * 0.4f
+            : heldMuzzles.TryGetValue(weapon.id, out Vector3 muzzleLocal) ? gunTransform.TransformPoint(muzzleLocal)
+            : gunTransform.position + cameraTransform.forward * 0.25f;
         GameFX.MuzzleFlash(muzzle, cameraTransform.forward, big);
         GameFX.FlashLight(muzzle, new Color(1f, 0.75f, 0.4f), big ? 5f : 3f, big ? 4f : 3f, 0.06f);
         GameFX.ShellCasing(muzzle - cameraTransform.forward * 0.15f + cameraTransform.right * 0.03f,
@@ -559,9 +569,35 @@ public class WeaponSystem : GameSystem
 
     // ---------- Gun model ----------
 
+    // the model in the player's hands follows whichever gun is active
+    void ShowHeldModel()
+    {
+        if (sidearm == null) return;
+        WeaponId id = ActiveWeapon.id;
+        if (shownWeapon == id) return;
+        shownWeapon = id;
+
+        if (WeaponModels.HasOwnModel(id) && !heldModels.ContainsKey(id))
+        {
+            heldModels[id] = WeaponModels.Create(id, gunTransform, out Vector3 muzzleLocal);
+            if (heldModels[id] != null) heldMuzzles[id] = muzzleLocal;
+        }
+
+        bool ownModel = heldModels.TryGetValue(id, out GameObject shown) && shown != null;
+        for (int i = 0; i < sceneGunRenderers.Length; i++)
+        {
+            if (sceneGunRenderers[i] != null) sceneGunRenderers[i].enabled = !ownModel && sceneGunRendererWasOn[i];
+        }
+        foreach (KeyValuePair<WeaponId, GameObject> model in heldModels)
+        {
+            if (model.Value != null) model.Value.SetActive(model.Key == id);
+        }
+    }
+
     public void UpdateGunSway()
     {
         if (gunTransform == null) return;
+        ShowHeldModel();
         // the gun trails the view a little when turning and breathes at rest
         Quaternion sway = Quaternion.identity;
         if (MainCamera != null && Time.deltaTime > 0f)

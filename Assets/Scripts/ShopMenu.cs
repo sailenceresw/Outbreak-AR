@@ -133,7 +133,8 @@ public class ShopMenu : MonoBehaviour
                 onClick = () => Purchase(Arsenal.Buy(weapon.id));
             }
 
-            AddRow(i, weapons.Length, weapon.name, stats + "\n<color=#999999>" + weapon.description + "</color>", action, accent, onClick);
+            AddRow(i, weapons.Length, weapon.name, stats + "\n<color=#999999>" + weapon.description + "</color>", action, accent, onClick,
+                1f, WeaponIcon(weapon.id), locked);
         }
     }
 
@@ -206,7 +207,14 @@ public class ShopMenu : MonoBehaviour
         else Refresh();
     }
 
-    void AddRow(int index, int count, string title, string body, string action, Color accent, Action onClick, float top = 1f)
+    // the gun's picture, rendered from its model in the editor (Tools > Outbreak > Render Weapon Icons)
+    static Sprite WeaponIcon(WeaponId id)
+    {
+        return Resources.Load<Sprite>("WeaponIcons/" + id);
+    }
+
+    void AddRow(int index, int count, string title, string body, string action, Color accent, Action onClick,
+        float top = 1f, Sprite picture = null, bool dimPicture = false)
     {
         float height = top / Mathf.Max(count, 4);
         float rowTop = top - index * height;
@@ -214,12 +222,33 @@ public class ShopMenu : MonoBehaviour
         Stretch(card, new Vector2(0f, rowTop - height + 0.008f), new Vector2(1f, rowTop - 0.008f));
         UIStyle.AddPanel(card.gameObject, UIStyle.PanelLight);
 
-        TMP_Text titleText = NewText(card, title, 22f, FontStyles.Bold, new Vector2(0.04f, 0.55f), new Vector2(0.68f, 0.95f));
-        titleText.alignment = TextAlignmentOptions.MidlineLeft;
-        TMP_Text bodyText = NewText(card, body, 15f, FontStyles.Normal, new Vector2(0.04f, 0.05f), new Vector2(0.68f, 0.58f));
-        bodyText.alignment = TextAlignmentOptions.TopLeft;
+        // with a picture, the text moves right to make room for it
+        float textLeft = 0.04f;
+        if (picture != null)
+        {
+            RectTransform pictureRect = NewRect(card, "Picture");
+            Stretch(pictureRect, new Vector2(0.02f, 0.08f), new Vector2(0.3f, 0.92f));
+            Image image = pictureRect.gameObject.AddComponent<Image>();
+            image.sprite = picture;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            // guns not yet unlocked show as a dark silhouette
+            image.color = dimPicture ? new Color(0.1f, 0.1f, 0.1f, 0.9f) : Color.white;
+            textLeft = 0.32f;
+        }
 
-        Button button = UIStyle.NewButton(card, template, action, accent, 18f, onClick);
+        TMP_Text titleText = NewText(card, title, 28f, FontStyles.Bold, new Vector2(textLeft, 0.55f), new Vector2(0.7f, 0.95f));
+        titleText.alignment = TextAlignmentOptions.MidlineLeft;
+        titleText.enableAutoSizing = true;
+        titleText.fontSizeMin = 18f;
+        titleText.fontSizeMax = 28f;
+        TMP_Text bodyText = NewText(card, body, 20f, FontStyles.Normal, new Vector2(textLeft, 0.05f), new Vector2(0.7f, 0.58f));
+        bodyText.alignment = TextAlignmentOptions.TopLeft;
+        bodyText.enableAutoSizing = true;
+        bodyText.fontSizeMin = 13f;
+        bodyText.fontSizeMax = 20f;
+
+        Button button = UIStyle.NewButton(card, template, action, accent, 22f, onClick);
         Stretch((RectTransform)button.transform, new Vector2(0.71f, 0.2f), new Vector2(0.97f, 0.8f));
         button.interactable = onClick != null;
     }
