@@ -10,6 +10,8 @@ public class GameControllerScript : MonoBehaviour
 {
     public enum GameState { Intro, Scanning, LevelIntro, Playing, LevelComplete, Won, Lost }
     public enum WeaponType { Pistol, Shotgun }
+    // what dealt the damage that's being applied right now, so kills can count toward missions
+    enum DamageSource { Other, Pistol, Shotgun, Grenade }
 
     const float ComboWindow = 2.5f;
     const int MaxCombo = 5;
@@ -151,6 +153,12 @@ public class GameControllerScript : MonoBehaviour
     float nextGrenadeTime;
     GameObject activeAmmoPickup;
 
+    // missions and survivor level
+    GameObject missionsButton;
+    TMP_Text missionsButtonLabel;
+    bool missionBoardOpen;
+    DamageSource damageSource;
+
     // stats for the end-of-run card
     int runKills;
     int shotsFired;
@@ -226,10 +234,16 @@ public class GameControllerScript : MonoBehaviour
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        MissionSystem.MissionCompleted -= OnMissionCompleted;
     }
 
     void Start()
     {
+        // survivor level rewards
+        maxPlayerHealth += PlayerProfile.BonusMaxHealth;
+        int streakBonus = PlayerProfile.RegisterPlayToday();
+        MissionSystem.MissionCompleted += OnMissionCompleted;
+
         bool fromLevelSelect = pendingStartLevel >= 0;
         startLevelIndex = fromLevelSelect ? pendingStartLevel : firstLevel;
 
@@ -262,6 +276,7 @@ public class GameControllerScript : MonoBehaviour
 
         CreateSwapButton();
         CreateGrenadeButton();
+        CreateMissionsButton();
         SetActiveSafe(shootButton, false);
         SetActiveSafe(greetingPrompt, !skipGreeting);
         SetActiveSafe(scanPrompt, skipGreeting);
@@ -280,7 +295,12 @@ public class GameControllerScript : MonoBehaviour
             playerHealthText.text = string.Empty;
             if (ammoCountText != null) ammoCountText.text = string.Empty;
         }
+        RefreshXP();
         RefreshHud();
+        if (streakBonus > 0)
+        {
+            ShowMessage(PlayerProfile.Streak + "-DAY STREAK!  +" + streakBonus + " XP", 3f, new Color(1f, 0.75f, 0.15f));
+        }
 
         StartCoroutine(Fade(1f, 0f));
     }
@@ -301,6 +321,10 @@ public class GameControllerScript : MonoBehaviour
         UpdateAim();
 
         if (combo > 0 && Time.time - lastKillTime > ComboWindow) combo = 0;
+
+        // the missions button lives on the menu screens, never mid-fight
+        bool onMenu = State == GameState.Intro || State == GameState.Scanning || State == GameState.Lost || State == GameState.Won;
+        SetActiveSafe(missionsButton, onMenu && !missionBoardOpen);
 
         UpdateGunRecoil();
         UpdateTension();
@@ -329,7 +353,7 @@ public class GameControllerScript : MonoBehaviour
             newWeapon = true;
         }
         SetActiveSafe(swapButton, shotgunUnlocked);
-        GrenadeCount = Mathf.Max(GrenadeCount, grenadesPerLevel);
+        GrenadeCount = Mathf.Max(GrenadeCount, grenadesPerLevel + PlayerProfile.BonusGrenades);
         SetActiveSafe(grenadeButton, true);
         GameProgress.Unlock(index);
 
@@ -463,6 +487,10 @@ public class GameControllerScript : MonoBehaviour
 
         GameProgress.SubmitLevelScore(currentLevelIndex, Score - levelStartScore);
         GameProgress.Unlock(currentLevelIndex + 1);
+
+        MissionSystem.Report(MissionType.ClearLevels);
+        if (PlayerHealth >= maxPlayerHealth * 0.5f) MissionSystem.Report(MissionType.StrongFinish);
+        AwardXP(50 + 10 * currentLevelIndex);
 
         if (hud != null)
         {
@@ -611,7 +639,7 @@ public class GameControllerScript : MonoBehaviour
     void ResetLoadout(int levelIndex)
     {
         Score = 0;
-        AmmoCount = startingAmmo + 5 * Mathf.Max(levelIndex - firstLevel, 0);
+        AmmoCount = startingAmmo + 5 * Mathf.Max(levelIndex - firstLevel, 0) + PlayerProfile.BonusStartingAmmo;
         // the shotgun is announced on its unlock level, later starts already have it
         shotgunUnlocked = levelIndex > LevelCatalog.ShotgunUnlockLevel;
         ShellCount = shotgunUnlocked ? startingShells : 0;
@@ -781,6 +809,14 @@ public class GameControllerScript : MonoBehaviour
         AddScore(zombie.ScoreValue * combo);
         if (combo >= 3) ShowMessage(combo + "x COMBO!", 1.5f, new Color(1f, 0.55f, 0.15f));
 
+        MissionSystem.Report(MissionType.KillZombies);
+        if (zombie.Type == ZombieType.Runner) MissionSystem.Report(MissionType.KillRunners);
+        if (zombie.Type == ZombieType.Brute || zombie.IsBoss) MissionSystem.Report(MissionType.KillBrutes);
+        if (damageSource == DamageSource.Grenade) MissionSystem.Report(MissionType.GrenadeKills);
+        if (damageSource == DamageSource.Shotgun) MissionSystem.Report(MissionType.ShotgunKills);
+        MissionSystem.ReportBest(MissionType.ReachCombo, combo);
+        AwardXP(zombie.ScoreValue / 10);
+
         float dropChance = zombie.Type == ZombieType.Brute ? bruteDropChance : powerUpDropChance;
         if (!zombie.IsBoss && Random.value < dropChance)
         {
@@ -855,6 +891,7 @@ public class GameControllerScript : MonoBehaviour
     {
         AmmoCount += amount;
         GameAudio.Play(GameAudio.Pickup, 0.7f);
+        MissionSystem.Report(MissionType.CollectPickups);
 
         string message = "+" + amount + " ammo";
         if (shotgunUnlocked)
@@ -874,6 +911,7 @@ public class GameControllerScript : MonoBehaviour
     {
         PlayerHealth = Mathf.Min(PlayerHealth + amount, maxPlayerHealth);
         GameAudio.Play(GameAudio.Pickup, 0.7f, 1.2f);
+        MissionSystem.Report(MissionType.CollectPickups);
         ShowMessage("+" + Mathf.RoundToInt(amount) + " health");
     }
 
@@ -881,6 +919,7 @@ public class GameControllerScript : MonoBehaviour
     {
         GameAudio.Play(GameAudio.PowerUp, 0.8f);
         ShowMessage(PowerUpPickup.DisplayName(type) + "!", 2f);
+        MissionSystem.Report(MissionType.CollectPickups);
 
         switch (type)
         {
@@ -1080,7 +1119,14 @@ public class GameControllerScript : MonoBehaviour
 
     void ApplyHit(ZombieController zombie, float damage, Vector3 point, Vector3 direction, bool headshot)
     {
+        damageSource = CurrentWeapon == WeaponType.Shotgun ? DamageSource.Shotgun : DamageSource.Pistol;
         bool killed = zombie.TakeDamage(damage, direction);
+        damageSource = DamageSource.Other;
+        if (headshot && State == GameState.Playing)
+        {
+            MissionSystem.Report(MissionType.Headshots);
+            if (killed) AwardXP(5);
+        }
 
         GameFX.Blood(point, -direction + Vector3.up * 0.3f, headshot);
         GameAudio.Play(killed ? GameAudio.KillMarker : GameAudio.HitMarker, 0.5f);
@@ -1181,7 +1227,9 @@ public class GameControllerScript : MonoBehaviour
             float falloff = Mathf.Lerp(1f, 0.35f, distance / grenadeRadius);
             float damage = grenadeDamage * falloff * (zombie.IsBoss ? 0.6f : 1f) * DamageBoost();
             Vector3 direction = distance > 0.01f ? offset / distance : Vector3.forward;
+            damageSource = DamageSource.Grenade;
             bool killed = zombie.TakeDamage(damage, direction);
+            damageSource = DamageSource.Other;
             if (killed) kills++;
 
             Vector3 chest = zombie.transform.position + Vector3.up * 1.2f * zombie.transform.localScale.y;
@@ -1191,6 +1239,7 @@ public class GameControllerScript : MonoBehaviour
 
         if (kills >= 2)
         {
+            MissionSystem.Report(MissionType.GrenadeMultiKill);
             AddScore(150 * (kills - 1));
             ShowMessage(kills >= 4 ? "MASSACRE! x" + kills : "MULTI KILL x" + kills, 1.8f, new Color(1f, 0.55f, 0.15f));
             GameAudio.Play(GameAudio.KillMarker, 0.8f, 0.8f);
@@ -1381,6 +1430,64 @@ public class GameControllerScript : MonoBehaviour
         StartCoroutine(BeginLevel(index, false));
     }
 
+    // ---------- Missions and survivor level ----------
+
+    void AwardXP(int amount)
+    {
+        int levels = PlayerProfile.AddXP(amount);
+        if (levels > 0) OnLevelsGained(levels);
+        RefreshXP();
+    }
+
+    void RefreshXP()
+    {
+        if (hud != null) hud.SetXP(PlayerProfile.Level, PlayerProfile.LevelProgress);
+    }
+
+    void OnLevelsGained(int levels)
+    {
+        int level = PlayerProfile.Level;
+        string reward = PlayerProfile.RewardFor(level);
+        GameAudio.Play(GameAudio.Fanfare, 0.9f, 1.1f);
+        ShowMessage("LEVEL UP!  SURVIVOR LV " + level +
+            (reward.Length > 0 ? "\n<size=70%>Unlocked: " + reward + "</size>" : string.Empty),
+            2.5f, new Color(0.35f, 0.75f, 1f));
+        RefreshXP();
+    }
+
+    void OnMissionCompleted(MissionSystem.Mission mission)
+    {
+        GameAudio.Play(GameAudio.Pickup, 0.9f, 1.3f);
+        ShowMessage("MISSION COMPLETE!\n<size=70%>" + mission.description + "  -  claim on the mission board</size>",
+            2.5f, new Color(0.4f, 0.95f, 0.4f));
+    }
+
+    public void OpenMissionBoard()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        if (canvas == null || missionBoardOpen) return;
+
+        missionBoardOpen = true;
+        GameAudio.Play(GameAudio.Pickup, 0.6f);
+        MissionBoard.Show(canvas.rootCanvas, playerHealthText, OnLevelsGained, () =>
+        {
+            missionBoardOpen = false;
+            RefreshXP();
+        });
+    }
+
+    // bottom-centre on menu screens; shows how many missions are ready to claim
+    void CreateMissionsButton()
+    {
+        missionsButton = CloneShootButton("MissionsButton", OpenMissionBoard, new Vector2(0.5f, 0f),
+            new Vector2(0f, 30f), new Vector2(260f, 90f), "MISSIONS", out missionsButtonLabel);
+        if (missionsButton != null)
+        {
+            Image background = missionsButton.GetComponent<Image>();
+            if (background != null) background.color = new Color(1f, 0.75f, 0.15f, background.color.a);
+        }
+    }
+
     // bottom-right, switches between pistol and shotgun
     void CreateSwapButton()
     {
@@ -1480,6 +1587,12 @@ public class GameControllerScript : MonoBehaviour
                 playerHealthText.text = "Health: " + Mathf.CeilToInt(PlayerHealth);
                 playerHealthText.color = Color.Lerp(Color.red, Color.white, PlayerHealth / (maxPlayerHealth * 0.5f));
             }
+        }
+
+        if (missionsButtonLabel != null && missionsButton != null && missionsButton.activeSelf)
+        {
+            int ready = MissionSystem.UnclaimedCount;
+            missionsButtonLabel.text = ready > 0 ? "MISSIONS  (" + ready + ")" : "MISSIONS";
         }
 
         if (grenadeButtonLabel != null)

@@ -14,6 +14,7 @@ public class GameHUD : MonoBehaviour
     static readonly Color HealthHigh = new Color(0.3f, 0.9f, 0.35f, 1f);
     static readonly Color HealthLow = new Color(0.95f, 0.15f, 0.1f, 1f);
     static readonly Color AimOnTarget = new Color(1f, 0.25f, 0.2f, 1f);
+    static readonly Color XPBarColor = new Color(0.35f, 0.75f, 1f, 1f);
 
     class DamageNumber
     {
@@ -33,6 +34,10 @@ public class GameHUD : MonoBehaviour
     float healthGhostShown = 1f;
     float healthGhostHoldUntil;
     int healthShownValue = -1;
+    TMP_Text xpLevelText;
+    Image xpFill;
+    int xpLevel = -1;
+    float xpTarget;
     TMP_Text weaponText;
     TMP_Text roundsText;
     TMP_Text grenadeText;
@@ -175,7 +180,7 @@ public class GameHUD : MonoBehaviour
         // short call-outs like HEADSHOT! pop up above the crosshair
         calloutText = NewText(template, "Callout", 34f, TextAlignmentOptions.Center, root);
         calloutText.rectTransform.anchorMin = calloutText.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-        calloutText.rectTransform.sizeDelta = new Vector2(900f, 60f);
+        calloutText.rectTransform.sizeDelta = new Vector2(900f, 120f);
         calloutText.rectTransform.anchoredPosition = new Vector2(0f, 150f);
         calloutText.fontStyle = FontStyles.Bold;
 
@@ -222,6 +227,33 @@ public class GameHUD : MonoBehaviour
 
         healthGhost = NewFill("Ghost", bar, new Color(1f, 0.95f, 0.85f, 0.75f));
         healthFill = NewFill("Fill", bar, HealthHigh);
+
+        // survivor level and a thin XP bar just below the health bar
+        RectTransform xpPanel = NewRect("XPPanel", root);
+        xpPanel.anchorMin = xpPanel.anchorMax = new Vector2(0f, 1f);
+        xpPanel.pivot = new Vector2(0f, 1f);
+        xpPanel.anchoredPosition = new Vector2(18f, -66f);
+        xpPanel.sizeDelta = new Vector2(250f, 20f);
+
+        xpLevelText = NewText(template, "Level", 16f, TextAlignmentOptions.MidlineLeft, xpPanel);
+        xpLevelText.rectTransform.anchorMin = new Vector2(0f, 0f);
+        xpLevelText.rectTransform.anchorMax = new Vector2(0f, 1f);
+        xpLevelText.rectTransform.pivot = new Vector2(0f, 0.5f);
+        xpLevelText.rectTransform.sizeDelta = new Vector2(60f, 0f);
+        xpLevelText.color = XPBarColor;
+        xpLevelText.fontStyle = FontStyles.Bold;
+
+        RectTransform xpBar = NewRect("Bar", xpPanel);
+        xpBar.anchorMin = new Vector2(0f, 0.5f);
+        xpBar.anchorMax = new Vector2(1f, 0.5f);
+        xpBar.offsetMin = new Vector2(62f, -3f);
+        xpBar.offsetMax = new Vector2(0f, 3f);
+        Image xpTrack = xpBar.gameObject.AddComponent<Image>();
+        xpTrack.sprite = GameFX.WhiteSprite;
+        xpTrack.color = new Color(0f, 0f, 0f, 0.55f);
+        xpTrack.raycastTarget = false;
+        xpFill = NewFill("Fill", xpBar, XPBarColor);
+        xpFill.fillAmount = 0f;
     }
 
     void BuildAmmoPanel(TMP_Text template)
@@ -303,6 +335,20 @@ public class GameHUD : MonoBehaviour
         UpdateHealthBar();
         UpdateCallout();
         UpdateDamageNumbers();
+        xpFill.fillAmount = Mathf.MoveTowards(xpFill.fillAmount, xpTarget, Time.deltaTime * 1.5f);
+    }
+
+    public void SetXP(int level, float progress)
+    {
+        if (level != xpLevel)
+        {
+            // a new level starts the bar from empty, except on the first update
+            if (xpLevel >= 0) xpFill.fillAmount = 0f;
+            else xpFill.fillAmount = progress;
+            xpLevel = level;
+            xpLevelText.text = "LV " + level;
+        }
+        xpTarget = progress;
     }
 
     void UpdateHealthBar()

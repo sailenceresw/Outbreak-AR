@@ -32,6 +32,7 @@ Chapter 1 runs in `Level1.unity` and Chapter 2 in `Level2.unity`. Levels within 
 - **Grenades:** two per level, plus one from each ammo crate. Aim at the floor and tap GRENADE to lob one; the blast hits every zombie nearby, with a bonus for multi-kills.
 - **Combat feedback:** floating damage numbers (gold for headshots), a crosshair that turns red over a target, blood pools where zombies fall, and an end-of-run card with kills, accuracy and score.
 - **HUD:** health bar that shows each hit, ammo and grenade panel, and a dark backing so it stays readable over any camera image.
+- **Daily missions and survivor level:** three new missions every day, XP from kills and missions, survivor levels 1-30 that unlock extra ammo, grenades and health, and a 7-day streak bonus. Open MISSIONS from the start or end screen.
 - **Level select:** progress is saved on the device. Returning players can start from any unlocked level and see their best score for each.
 - **Power-ups:** Rapid Fire, Hollow Points, Cryo Pulse and Shockwave.
 - **Supply drops:** ammo crates and med kits. Shoot them or walk up to them to collect.
