@@ -121,7 +121,12 @@ public class LevelFlowManager : GameSystem
         if (!levelChosen && GameProgress.UnlockedLevel > 0 && canvas != null)
         {
             levelChosen = true;
-            LevelSelectMenu.Show(canvas.rootCanvas, Game.playerHealthText, OnLevelSelected);
+            LevelSelectMenu.Show(canvas.rootCanvas, Game.playerHealthText, OnLevelSelected, () =>
+            {
+                // backed out: back to the scan prompt, which asks again next time
+                levelChosen = false;
+                SetActiveSafe(Game.scanPrompt, true);
+            });
             return;
         }
 

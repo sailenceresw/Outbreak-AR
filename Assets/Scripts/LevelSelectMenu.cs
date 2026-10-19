@@ -9,8 +9,10 @@ public class LevelSelectMenu : MonoBehaviour
     const int LevelsPerColumn = 4;
 
     Action<int> onSelect;
+    // backed out without picking a level
+    Action onClosed;
 
-    public static LevelSelectMenu Show(Canvas canvas, TMP_Text textTemplate, Action<int> onSelect)
+    public static LevelSelectMenu Show(Canvas canvas, TMP_Text textTemplate, Action<int> onSelect, Action onClosed = null)
     {
         GameObject panel = new GameObject("LevelSelectMenu", typeof(RectTransform));
         RectTransform rect = panel.GetComponent<RectTransform>();
@@ -25,8 +27,15 @@ public class LevelSelectMenu : MonoBehaviour
 
         LevelSelectMenu menu = panel.AddComponent<LevelSelectMenu>();
         menu.onSelect = onSelect;
+        menu.onClosed = onClosed;
         menu.Build(rect, textTemplate);
         return menu;
+    }
+
+    void Update()
+    {
+        // the phone's back button closes the picker like BACK does
+        if (PauseMenu.BackPressed()) Close();
     }
 
     void Build(RectTransform root, TMP_Text template)
@@ -41,7 +50,10 @@ public class LevelSelectMenu : MonoBehaviour
         GameObject grid = new GameObject("Grid", typeof(RectTransform));
         RectTransform gridRect = grid.GetComponent<RectTransform>();
         gridRect.SetParent(root, false);
-        Stretch(gridRect, new Vector2(0.04f, 0.04f), new Vector2(0.96f, 0.82f));
+        Stretch(gridRect, new Vector2(0.04f, 0.13f), new Vector2(0.96f, 0.82f));
+
+        Button back = UIStyle.NewButton(root, template, "BACK", UIStyle.Steel, 24f, Close);
+        Stretch((RectTransform)back.transform, new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.1f));
 
         int unlocked = GameProgress.UnlockedLevel;
         for (int i = 0; i < LevelCatalog.Count; i++)
@@ -98,6 +110,14 @@ public class LevelSelectMenu : MonoBehaviour
         Action<int> callback = onSelect;
         Destroy(gameObject);
         callback?.Invoke(index);
+    }
+
+    void Close()
+    {
+        GameAudio.Play(GameAudio.DryFire, 0.6f, 1.1f);
+        Action callback = onClosed;
+        Destroy(gameObject);
+        callback?.Invoke();
     }
 
     static TMP_Text NewText(TMP_Text template, RectTransform parent, string value, float size, FontStyles style)
