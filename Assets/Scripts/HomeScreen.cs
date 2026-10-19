@@ -207,27 +207,27 @@ public class HomeScreen : MonoBehaviour
         GameObject card = new GameObject("Card", typeof(RectTransform));
         RectTransform cardRect = card.GetComponent<RectTransform>();
         cardRect.SetParent(panel, false);
-        Stretch(cardRect, new Vector2(0.1f, 0.26f), new Vector2(0.9f, 0.74f));
+        Stretch(cardRect, new Vector2(0.1f, 0.2f), new Vector2(0.9f, 0.8f));
         UIStyle.AddPanel(card, UIStyle.Panel);
 
-        TMP_Text title = NewText(cardRect, "SETTINGS", 36f, FontStyles.Bold, new Vector2(0f, 0.85f), new Vector2(1f, 0.97f));
+        TMP_Text title = NewText(cardRect, "SETTINGS", 36f, FontStyles.Bold, new Vector2(0f, 0.88f), new Vector2(1f, 0.98f));
         title.characterSpacing = 8f;
 
         Button sound = null, vibration = null, graphics = null, reset = null;
         bool confirmReset = false;
-        sound = CardButton(cardRect, SoundLabel(), UIStyle.XP, 0.68f, () =>
+        sound = CardButton(cardRect, SoundLabel(), UIStyle.XP, 0.75f, () =>
         {
             GameSettings.Sound = !GameSettings.Sound;
             sound.GetComponentInChildren<TMP_Text>().text = SoundLabel();
         });
         UIStyle.AddIcon(sound, "Sound");
-        graphics = CardButton(cardRect, GraphicsLabel(), UIStyle.XP, 0.53f, () =>
+        graphics = CardButton(cardRect, GraphicsLabel(), UIStyle.XP, 0.62f, () =>
         {
             GameSettings.Quality = GameSettings.HighQuality ? GraphicsQuality.Low : GraphicsQuality.High;
             graphics.GetComponentInChildren<TMP_Text>().text = GraphicsLabel();
         });
         UIStyle.AddIcon(graphics, "Graphics");
-        vibration = CardButton(cardRect, VibrationLabel(), UIStyle.XP, 0.38f, () =>
+        vibration = CardButton(cardRect, VibrationLabel(), UIStyle.XP, 0.49f, () =>
         {
             GameSettings.Vibration = !GameSettings.Vibration;
             vibration.GetComponentInChildren<TMP_Text>().text = VibrationLabel();
@@ -236,7 +236,15 @@ public class HomeScreen : MonoBehaviour
 #endif
         });
         UIStyle.AddIcon(vibration, "Vibration");
-        reset = CardButton(cardRect, "RESET PROGRESS", UIStyle.Blood, 0.21f, () =>
+        Button tutorial = null;
+        tutorial = CardButton(cardRect, TutorialCoach.Done ? "REPLAY TUTORIAL" : "TUTORIAL: ON", UIStyle.Gold, 0.34f, () =>
+        {
+            // the tips run again on the next fight on level 1
+            TutorialCoach.Done = false;
+            tutorial.GetComponentInChildren<TMP_Text>().text = "TUTORIAL: ON  <size=70%>(play level 1)</size>";
+        });
+        UIStyle.AddIcon(tutorial, "Missions");
+        reset = CardButton(cardRect, "RESET PROGRESS", UIStyle.Blood, 0.19f, () =>
         {
             // two taps so it can't happen by accident
             if (!confirmReset)
@@ -263,7 +271,7 @@ public class HomeScreen : MonoBehaviour
     Button CardButton(RectTransform card, string label, Color accent, float bottom, Action onClick)
     {
         Button button = UIStyle.NewButton(card, template, label, accent, 22f, onClick);
-        Stretch((RectTransform)button.transform, new Vector2(0.08f, bottom), new Vector2(0.92f, bottom + 0.12f));
+        Stretch((RectTransform)button.transform, new Vector2(0.08f, bottom), new Vector2(0.92f, bottom + 0.105f));
         button.GetComponentInChildren<TMP_Text>().richText = true;
         return button;
     }

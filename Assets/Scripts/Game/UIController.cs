@@ -10,6 +10,8 @@ using GameState = GameControllerScript.GameState;
 public class UIController : GameSystem
 {
     public new GameHUD Hud { get; private set; }
+    public GameObject TrapButton => trapButton;
+    public GameObject GrenadeButton => grenadeButton;
 
     HomeScreen homeScreen;
     GameObject swapButton;
