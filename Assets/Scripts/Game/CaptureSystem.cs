@@ -81,6 +81,8 @@ public class CaptureSystem : GameSystem
         bool first = ZombieDex.RecordCaught(zombie.Type, zombie.IsMutant);
         int xp = ZombieDex.CatchXP(zombie.Type, zombie.IsMutant);
 
+        LifetimeStats.Add(Stat.Catches);
+        if (zombie.IsMutant) LifetimeStats.Add(Stat.MutantsCaught);
         MissionSystem.Report(MissionType.CatchZombies);
         if (zombie.IsMutant || zombie.Type == ZombieType.Spitter || zombie.Type == ZombieType.Brute)
         {

@@ -479,6 +479,7 @@ public class MapScreen : MonoBehaviour
                     float before = walked;
                     walked += (float)step;
                     PlayerPrefs.SetFloat(dayKey, walked);
+                    LifetimeStats.Add(Stat.DistanceWalked, Mathf.RoundToInt((float)step), false);
                     lastWalkLat = data.latitude;
                     lastWalkLon = data.longitude;
 

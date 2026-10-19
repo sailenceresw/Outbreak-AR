@@ -13,6 +13,7 @@ public class HomeScreen : MonoBehaviour
     TMP_Text missionsLabel;
     TMP_Text dexLabel;
     TMP_Text mapLabel;
+    Image avatarImage;
     Image xpFill;
     RectTransform root;
     GameObject settingsPanel;
@@ -82,13 +83,23 @@ public class HomeScreen : MonoBehaviour
         RectTransform cardRect = card.GetComponent<RectTransform>();
         cardRect.SetParent(root, false);
         Stretch(cardRect, new Vector2(0.1f, 0.66f), new Vector2(0.9f, 0.78f));
-        UIStyle.AddPanel(card, UIStyle.Panel);
+        Image cardImage = UIStyle.AddPanel(card, UIStyle.Panel);
 
-        levelText = NewText(cardRect, string.Empty, 28f, FontStyles.Bold, new Vector2(0.05f, 0.6f), new Vector2(0.95f, 0.92f));
+        // tapping the card opens the full profile
+        Button cardButton = card.AddComponent<Button>();
+        cardButton.targetGraphic = cardImage;
+        cardButton.onClick.AddListener(OpenProfile);
+
+        RectTransform avatarRect = NewRectIn(cardRect, "Avatar", new Vector2(0.03f, 0.12f), new Vector2(0.19f, 0.88f));
+        avatarImage = avatarRect.gameObject.AddComponent<Image>();
+        avatarImage.preserveAspect = true;
+        avatarImage.raycastTarget = false;
+
+        levelText = NewText(cardRect, string.Empty, 28f, FontStyles.Bold, new Vector2(0.2f, 0.6f), new Vector2(0.97f, 0.92f));
         GameObject bar = new GameObject("XPBar", typeof(RectTransform));
         RectTransform barRect = bar.GetComponent<RectTransform>();
         barRect.SetParent(cardRect, false);
-        Stretch(barRect, new Vector2(0.08f, 0.44f), new Vector2(0.92f, 0.54f));
+        Stretch(barRect, new Vector2(0.22f, 0.44f), new Vector2(0.95f, 0.54f));
         Image track = bar.AddComponent<Image>();
         track.sprite = GameFX.WhiteSprite;
         track.color = new Color(1f, 1f, 1f, 0.12f);
@@ -101,7 +112,7 @@ public class HomeScreen : MonoBehaviour
         xpFill.type = Image.Type.Filled;
         xpFill.fillMethod = Image.FillMethod.Horizontal;
         xpFill.color = UIStyle.XP;
-        detailText = NewText(cardRect, string.Empty, 19f, FontStyles.Normal, new Vector2(0.05f, 0.06f), new Vector2(0.95f, 0.4f));
+        detailText = NewText(cardRect, string.Empty, 19f, FontStyles.Normal, new Vector2(0.2f, 0.06f), new Vector2(0.97f, 0.4f));
 
         // the two ways to play first and largest, then a grid of the rest
         Button play = AddButton("PLAY", UIStyle.Blood, 40f, 0.52f, 0.63f, onPlay, icon: "Play");
@@ -136,7 +147,10 @@ public class HomeScreen : MonoBehaviour
     public void Refresh()
     {
         int level = PlayerProfile.Level;
-        levelText.text = "SURVIVOR  <color=#5AB4FF>LV " + level + "</color>";
+        levelText.text = PlayerProfile.Name.ToUpper() + "  <color=#5AB4FF>LV " + level + "</color>  <size=60%><color=#FFC832>" +
+            PlayerProfile.Title(level).ToUpper() + "</color></size>";
+        Sprite avatar = Resources.Load<Sprite>(PlayerProfile.Avatar);
+        avatarImage.sprite = avatar != null ? avatar : Resources.Load<Sprite>("WeaponIcons/Pistol");
         xpFill.fillAmount = PlayerProfile.LevelProgress;
         int streak = PlayerProfile.Streak;
         detailText.text = "<color=#FFC832>" + PlayerProfile.SupplyPoints.ToString("N0") + " SP</color>     " +
@@ -149,6 +163,22 @@ public class HomeScreen : MonoBehaviour
         missionsLabel.text = ready > 0 ? "MISSIONS  (" + ready + ")" : "MISSIONS";
         dexLabel.text = "ZOMBIE-DEX  <size=80%>" + ZombieDex.SpeciesCaught + "/" + ZombieDex.CatchableSpecies + "</size>";
         mapLabel.text = "WORLD MAP\n<size=50%><color=#DDDDDD>Walk to outbreak sites and caches</color></size>";
+    }
+
+    void OpenProfile()
+    {
+        GameAudio.Play(GameAudio.Pickup, 0.5f, 0.9f);
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas != null) ProfileMenu.Show(canvas.rootCanvas, template, Refresh);
+    }
+
+    RectTransform NewRectIn(RectTransform parent, string name, Vector2 min, Vector2 max)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform));
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        Stretch(rect, min, max);
+        return rect;
     }
 
     public void SetVisible(bool visible)

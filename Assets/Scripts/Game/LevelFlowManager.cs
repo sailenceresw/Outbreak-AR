@@ -293,6 +293,7 @@ public class LevelFlowManager : GameSystem
         GameProgress.Unlock(CurrentLevelIndex + 1);
 
         MissionSystem.Report(MissionType.ClearLevels);
+        LifetimeStats.Add(Stat.LevelsCleared);
         if (Player.Current >= Player.Max * 0.5f) MissionSystem.Report(MissionType.StrongFinish);
         Progression.AwardXP(50 + 10 * CurrentLevelIndex);
 
@@ -333,6 +334,8 @@ public class LevelFlowManager : GameSystem
 
         MapSites.MarkCleared(Encounter.siteId);
         MissionSystem.Report(MissionType.ClearSites);
+        LifetimeStats.Add(Stat.SitesCleared);
+        if (Encounter.nest) LifetimeStats.Add(Stat.NestsDestroyed);
         PlayerProfile.AddSupply(Encounter.rewardSupply);
         if (Encounter.rewardTraps > 0) Inventory.Add(ItemId.Trap, Encounter.rewardTraps);
         Progression.AwardXP(Encounter.rewardXP);
@@ -382,6 +385,7 @@ public class LevelFlowManager : GameSystem
     void Lose()
     {
         SetState(GameState.Lost);
+        LifetimeStats.Add(Stat.Deaths);
         if (timeRoutine != null) StopCoroutine(timeRoutine);
         Time.timeScale = 1f;
         bool newHighScore = GameProgress.SubmitHighScore(Score);
@@ -454,7 +458,12 @@ public class LevelFlowManager : GameSystem
     public void RecordShot(bool hitZombie)
     {
         ShotsFired++;
-        if (hitZombie) ShotsHit++;
+        LifetimeStats.Add(Stat.ShotsFired, 1, false);
+        if (hitZombie)
+        {
+            ShotsHit++;
+            LifetimeStats.Add(Stat.ShotsHit, 1, false);
+        }
     }
 
     public void TickCombo()
@@ -468,6 +477,9 @@ public class LevelFlowManager : GameSystem
 
         ZombiesKilled++;
         RunKills++;
+        LifetimeStats.Add(Stat.Kills, 1, false);
+        if (zombie.IsBoss) LifetimeStats.Add(Stat.BossesKilled);
+        if (Weapons.CurrentDamageSource == DamageSource.Grenade) LifetimeStats.Add(Stat.GrenadeKills, 1, false);
 
         Combo = Time.time - lastKillTime <= ComboWindow ? Mathf.Min(Combo + 1, MaxCombo) : 1;
         lastKillTime = Time.time;

@@ -132,6 +132,7 @@ public static class MapSites
     {
         long readyAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + CacheCooldownMinutes * 60;
         PlayerPrefs.SetString("Cache_" + site.id, readyAt.ToString());
+        LifetimeStats.Add(Stat.CachesOpened, 1, false);
 
         System.Random random = new System.Random();
         int multiplier = site.rare ? 2 : 1;

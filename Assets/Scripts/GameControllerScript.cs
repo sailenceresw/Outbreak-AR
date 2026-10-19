@@ -161,6 +161,7 @@ public class GameControllerScript : MonoBehaviour
 
         if (Flow.IsPlaying)
         {
+            LifetimeStats.AddPlayTime(Time.unscaledDeltaTime);
             Spawner.Tick();
             Pickups.Tick();
             Weapons.TickReserveAmmo();

@@ -113,6 +113,48 @@ public static class PlayerProfile
         return 0;
     }
 
+    // ---------- Identity ----------
+
+    const string NameKey = "Profile_Name";
+    const string AvatarKey = "Profile_Avatar";
+    public const int MaxNameLength = 16;
+
+    public static string Name
+    {
+        get => PlayerPrefs.GetString(NameKey, "Survivor");
+        set
+        {
+            string clean = (value ?? string.Empty).Trim();
+            if (clean.Length > MaxNameLength) clean = clean.Substring(0, MaxNameLength);
+            // rich-text tags would restyle the menus, so angle brackets are dropped
+            clean = clean.Replace("<", string.Empty).Replace(">", string.Empty);
+            PlayerPrefs.SetString(NameKey, clean.Length > 0 ? clean : "Survivor");
+            PlayerPrefs.Save();
+        }
+    }
+
+    // a sprite path in Resources: a Dex portrait or a gun picture the player has unlocked
+    public static string Avatar
+    {
+        get => PlayerPrefs.GetString(AvatarKey, "WeaponIcons/Pistol");
+        set
+        {
+            PlayerPrefs.SetString(AvatarKey, value);
+            PlayerPrefs.Save();
+        }
+    }
+
+    // a rank that grows with the survivor level
+    public static string Title(int level)
+    {
+        if (level >= 30) return "Legend of the Outbreak";
+        if (level >= 22) return "Apex Hunter";
+        if (level >= 15) return "Veteran";
+        if (level >= 9) return "Zombie Hunter";
+        if (level >= 4) return "Scavenger";
+        return "Rookie";
+    }
+
     // ---------- Daily streak ----------
 
     // call once per session; returns the bonus XP awarded (on every 7th day in a row)

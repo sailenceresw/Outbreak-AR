@@ -339,7 +339,11 @@ public class WeaponSystem : GameSystem
         if (headshot && Flow.IsPlaying)
         {
             MissionSystem.Report(MissionType.Headshots);
-            if (killed) Progression.AwardXP(5);
+            if (killed)
+            {
+                Progression.AwardXP(5);
+                LifetimeStats.Add(Stat.HeadshotKills);
+            }
         }
 
         GameFX.Blood(point, -direction + Vector3.up * 0.3f, headshot);
