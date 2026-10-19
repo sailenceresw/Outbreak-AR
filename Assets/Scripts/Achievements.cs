@@ -74,6 +74,9 @@ public static class Achievements
             New("nest_breaker", "Explorer", "Nest Breaker", "Destroy a boss nest", 1, StatOf(Stat.NestsDestroyed), 500),
             New("scavenger", "Explorer", "Scavenger", "Open 10 supply caches", 10, StatOf(Stat.CachesOpened), 400, 3),
 
+            New("last_stand", "Survivor", "Last Stand", "Reach wave 10 in Endless", 10, () => EndlessScores.BestWave, 1000),
+            New("predator", "Explorer", "Predator", "Complete 5 Hunts", 5, StatOf(Stat.HuntsCompleted), 800, 3),
+
             New("chapter_one", "Survivor", "Chapter One", "Reach campaign level 4", 4, () => GameProgress.UnlockedLevel + 1, 300),
             New("outbreak_survivor", "Survivor", "Outbreak Survivor", "Beat the whole campaign", 1, StatOf(Stat.CampaignWins), 2000),
             New("dedicated", "Survivor", "Dedicated", "Play 7 days in a row", 7, () => PlayerProfile.Streak, 700),

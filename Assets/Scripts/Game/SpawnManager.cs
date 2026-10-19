@@ -16,6 +16,12 @@ public class SpawnManager : GameSystem
     int zombiesSpawned;
     // marked spots whose zombie hasn't risen yet; they count toward the alive cap
     int pendingSpawns;
+    // no spawning until then (the break between Endless waves)
+    float pausedUntil;
+
+    // the zombies placed for a hunt, until they're found
+    readonly List<ZombieController> hidden = new List<ZombieController>();
+    public List<ZombieController> Hidden => hidden;
     ZombieController boss;
     bool bossSpawned;
     float bossSpawnTime;
@@ -44,6 +50,8 @@ public class SpawnManager : GameSystem
     {
         zombiesSpawned = 0;
         pendingSpawns = 0;
+        pausedUntil = 0f;
+        hidden.Clear();
         boss = null;
         bossSpawned = false;
         if (hordeRoutine != null) StopCoroutine(hordeRoutine);
@@ -55,6 +63,54 @@ public class SpawnManager : GameSystem
         nextSpawnTime = Time.time + 0.5f;
         nextHordeTime = Time.time + Random.Range(18f, 26f);
         bossSpawnTime = Time.time + 1f;
+        if (Flow.Level.objective == LevelObjective.Hunt) PlaceHunt();
+    }
+
+    // ---------- Endless waves ----------
+
+    // a fresh wave: the level's numbers have been raised; spawning resumes after the break
+    public void StartWave(float breakSeconds)
+    {
+        zombiesSpawned = 0;
+        pausedUntil = Time.time + breakSeconds;
+        nextHordeTime = Mathf.Max(nextHordeTime, pausedUntil + Random.Range(10f, 18f));
+    }
+
+    // ---------- Hunt ----------
+
+    // the hunted zombies, idle at spots around the room out of view, as far apart as the room allows
+    void PlaceHunt()
+    {
+        hidden.Clear();
+        int count = Flow.Level.zombieCount;
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 spot = HidingSpot();
+            ZombieController zombie = SpawnZombie(RollZombieType(), spot, true, true);
+            if (zombie != null) hidden.Add(zombie);
+        }
+    }
+
+    Vector3 HidingSpot()
+    {
+        Vector3 best = ChooseSpawnPoint(false);
+        float bestGap = -1f;
+        // a few candidates; keep the one furthest from the zombies already hidden
+        for (int i = 0; i < 6; i++)
+        {
+            Vector3 candidate = ChooseSpawnPoint(false);
+            float gap = float.MaxValue;
+            foreach (ZombieController other in hidden)
+            {
+                if (other != null) gap = Mathf.Min(gap, Vector3.Distance(other.transform.position, candidate));
+            }
+            if (gap > bestGap)
+            {
+                bestGap = gap;
+                best = candidate;
+            }
+        }
+        return best;
     }
 
     public void PruneDead()
@@ -76,8 +132,10 @@ public class SpawnManager : GameSystem
             if (Time.time >= bossSpawnTime) SpawnBoss();
             return;
         }
+        // a hunt's zombies are all placed at the start; nothing new rises
+        if (level.objective == LevelObjective.Hunt) return;
 
-        if (Time.time < nextSpawnTime) return;
+        if (Time.time < nextSpawnTime || Time.time < pausedUntil) return;
         int maxAlive = level.maxAlive + (boss != null && !boss.IsDead ? 1 : 0);
         if (aliveZombies.Count + pendingSpawns >= maxAlive) return;
         if (level.objective != LevelObjective.Survive && zombiesSpawned >= level.zombieCount) return;
@@ -143,7 +201,7 @@ public class SpawnManager : GameSystem
         if (Flow.IsPlaying) SpawnZombie(type, position, false);
     }
 
-    AudioClip GroanClip()
+    public AudioClip GroanClip()
     {
         AudioSource source = Game.zombiePrefab != null ? Game.zombiePrefab.GetComponent<AudioSource>() : null;
         return source != null ? source.clip : null;
@@ -176,7 +234,7 @@ public class SpawnManager : GameSystem
         return cameraPosition + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
     }
 
-    ZombieController SpawnZombie(ZombieType type, Vector3 position, bool countsTowardLevel)
+    ZombieController SpawnZombie(ZombieType type, Vector3 position, bool countsTowardLevel, bool dormant = false)
     {
         if (Game.zombiePrefab == null || MainCamera == null) return null;
 
@@ -187,6 +245,7 @@ public class SpawnManager : GameSystem
 
         ZombieController zombie = zombieObject.GetComponent<ZombieController>();
         if (zombie == null) return null;
+        if (dormant) zombie.MakeDormant();
 
         // the realistic Mixamo characters when present, otherwise the original pack's variants
         GameObject model = ZombieController.RealisticModelFor(type);
@@ -254,10 +313,16 @@ public class SpawnManager : GameSystem
     {
         LevelDefinition level = Flow.Level;
         if (!level.hordeEvents || HordeActive || Time.time < nextHordeTime) return;
-        if (level.objective == LevelObjective.Eliminate && zombiesSpawned >= level.zombieCount) return;
+        if (CountsDown(level) && zombiesSpawned >= level.zombieCount) return;
 
         nextHordeTime = Time.time + Random.Range(25f, 35f);
         hordeRoutine = StartCoroutine(HordeRush());
+    }
+
+    // levels with a fixed number of zombies to kill (an Endless wave counts like one)
+    static bool CountsDown(LevelDefinition level)
+    {
+        return level.objective == LevelObjective.Eliminate || level.objective == LevelObjective.Endless;
     }
 
     // siren, then a pack of zombies charges from one direction
@@ -279,7 +344,7 @@ public class SpawnManager : GameSystem
             ? FacingAngle() + (Random.value < 0.5f ? -1f : 1f) * Random.Range(OutOfViewAngle() + 10f, 170f) * Mathf.Deg2Rad
             : Random.Range(0f, Mathf.PI * 2f);
         int count = 4 + Flow.CurrentLevelIndex / 3;
-        if (level.objective == LevelObjective.Eliminate)
+        if (CountsDown(level))
         {
             count = Mathf.Min(count, level.zombieCount - zombiesSpawned);
         }

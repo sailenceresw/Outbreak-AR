@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public enum LevelObjective { Eliminate, Survive, Boss }
+public enum LevelObjective { Eliminate, Survive, Boss, Endless, Hunt }
 
 [System.Serializable]
 public class LevelDefinition

@@ -88,6 +88,7 @@ public class GameControllerScript : MonoBehaviour
     public CaptureSystem Capture { get; private set; }
     public UIController UI { get; private set; }
     public TutorialCoach Coach { get; private set; }
+    public HuntSystem Hunt { get; private set; }
 
     public GameState State => Flow.State;
     public bool IsPlaying => Flow.IsPlaying;
@@ -115,10 +116,11 @@ public class GameControllerScript : MonoBehaviour
         Capture = gameObject.AddComponent<CaptureSystem>();
         UI = gameObject.AddComponent<UIController>();
         Coach = gameObject.AddComponent<TutorialCoach>();
+        Hunt = gameObject.AddComponent<HuntSystem>();
 
         // bound in this order, which is also the order their event handlers run in
         // (a kill updates the score and combo before any power-up drops)
-        foreach (GameSystem system in new GameSystem[] { Scenes, Progression, Flow, Spawner, Pickups, Player, Weapons, Capture, UI, Coach })
+        foreach (GameSystem system in new GameSystem[] { Scenes, Progression, Flow, Spawner, Pickups, Player, Weapons, Capture, UI, Coach, Hunt })
         {
             system.Bind(this);
         }
@@ -167,6 +169,7 @@ public class GameControllerScript : MonoBehaviour
             Spawner.Tick();
             Pickups.Tick();
             Weapons.TickReserveAmmo();
+            Hunt.Tick();
             Flow.TickObjective();
         }
         Weapons.UpdateAim();

@@ -15,9 +15,10 @@ public class MapSite
     public bool rare;
 }
 
-// what a map site fight looks like and what it pays out
+// what a map site fight (or an Endless or Hunt run from home) looks like and what it pays out
 public class SiteEncounter
 {
+    // empty for Endless and Hunt, which aren't map sites
     public string siteId;
     public LevelDefinition level;
     public float mutantChance;

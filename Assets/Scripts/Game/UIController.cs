@@ -35,6 +35,7 @@ public class UIController : GameSystem
     float nextHeartbeatTime;
     float baseMusicVolume = 0.7f;
     static readonly List<ZombieController> noZombies = new List<ZombieController>();
+    readonly List<ZombieController> awakeZombies = new List<ZombieController>();
     int shownScore = -1;
     int shownCombo = -1;
 
@@ -171,7 +172,13 @@ public class UIController : GameSystem
         if (Hud != null)
         {
             Hud.SetLowHealth(lowHealth);
-            if (playing) Hud.UpdateThreats(Spawner.Alive, MainCamera);
+            if (playing)
+            {
+                // hidden hunt zombies stay off the threat arrows; the radar is the only clue
+                awakeZombies.Clear();
+                foreach (ZombieController zombie in Spawner.Alive) if (zombie != null && !zombie.IsDormant) awakeZombies.Add(zombie);
+                Hud.UpdateThreats(awakeZombies, MainCamera);
+            }
             else Hud.UpdateThreats(noZombies, MainCamera);
         }
 
@@ -338,7 +345,8 @@ public class UIController : GameSystem
         {
             homeScreen = HomeScreen.Show(canvas.rootCanvas, Game.playerHealthText,
                 () => Flow.ChooseLevel(GameProgress.UnlockedLevel), OpenMap, ShowLevelPicker,
-                Progression.OpenMissionBoard, OpenShop, OpenDex);
+                Progression.OpenMissionBoard, OpenShop, OpenDex,
+                () => Scenes.StartEncounter(GameModes.Endless()), () => Scenes.StartEncounter(GameModes.Hunt()));
         }
         homeScreen.SetVisible(true);
     }

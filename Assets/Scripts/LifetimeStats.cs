@@ -20,6 +20,7 @@ public enum Stat
     // seconds spent in fights
     TimePlayed,
     CampaignWins,
+    HuntsCompleted,
 }
 
 // Lifetime totals for the profile screen and achievements, saved on the device.

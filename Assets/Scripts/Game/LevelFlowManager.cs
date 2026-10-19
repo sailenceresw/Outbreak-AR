@@ -185,6 +185,13 @@ public class LevelFlowManager : GameSystem
 
         ZombiesKilled = 0;
         surviveTimeLeft = Level.surviveSeconds;
+        // Endless always starts (and restarts) on wave 1
+        if (Level.objective == LevelObjective.Endless)
+        {
+            Wave = 1;
+            waveBreak = false;
+            GameModes.ApplyWave(Level, Wave);
+        }
         LevelPrepared?.Invoke(isRetry);
 
         if (Hud != null)
@@ -217,6 +224,10 @@ public class LevelFlowManager : GameSystem
             case LevelObjective.Boss:
                 if (Encounter != null) return "Destroy the nest's guardian";
                 return "Defeat " + (LevelCatalog.IsFinalBoss(CurrentLevelIndex) ? "the Abomination" : "the Brute King");
+            case LevelObjective.Endless:
+                return "Survive as many waves as you can";
+            case LevelObjective.Hunt:
+                return "Find and kill " + Level.zombieCount + " hidden zombies";
             default:
                 return "Eliminate " + Level.zombieCount + " zombies";
         }
@@ -227,6 +238,25 @@ public class LevelFlowManager : GameSystem
         string objective;
         switch (Level.objective)
         {
+            case LevelObjective.Endless:
+                if (waveBreak)
+                {
+                    objective = "WAVE " + (Wave + 1) + " INCOMING";
+                    break;
+                }
+                objective = "WAVE " + Wave + "   LEFT " + Mathf.Max(Level.zombieCount - ZombiesKilled, 0);
+                if (ZombiesKilled >= Level.zombieCount) StartCoroutine(NextWave());
+                break;
+
+            case LevelObjective.Hunt:
+                objective = "HUNT   " + Mathf.Max(Level.zombieCount - ZombiesKilled, 0) + " LEFT";
+                if (ZombiesKilled >= Level.zombieCount)
+                {
+                    CompleteLevel();
+                    return;
+                }
+                break;
+
             case LevelObjective.Survive:
                 surviveTimeLeft -= Time.deltaTime;
                 int seconds = Mathf.CeilToInt(Mathf.Max(surviveTimeLeft, 0f));
@@ -264,6 +294,34 @@ public class LevelFlowManager : GameSystem
         }
 
         if (Hud != null) Hud.SetObjective(objective + Pickups.PowerUpStatus());
+    }
+
+    // ---------- Endless waves ----------
+
+    public int Wave { get; private set; }
+    bool waveBreak;
+
+    // a short breather, then the next, harder wave
+    IEnumerator NextWave()
+    {
+        waveBreak = true;
+        int cleared = Wave;
+        Progression.AwardXP(15 * cleared);
+        Player.Heal(20f);
+        GameAudio.Play(GameAudio.Fanfare, 0.6f, 1.15f);
+        if (Hud != null) Hud.ShowBanner("WAVE " + cleared + " CLEARED", "+20 health\n<color=#FFC832>Wave " + (cleared + 1) + " in " +
+            Mathf.RoundToInt(GameModes.WaveBreakSeconds) + " seconds</color>", 3f);
+
+        Wave = cleared + 1;
+        GameModes.ApplyWave(Level, Wave);
+        ZombiesKilled = 0;
+        Spawner.StartWave(GameModes.WaveBreakSeconds);
+
+        yield return new WaitForSeconds(GameModes.WaveBreakSeconds);
+        if (!IsPlaying) yield break;
+        waveBreak = false;
+        GameAudio.Play(GameAudio.Siren, 0.4f, 1.1f);
+        ShowMessage("WAVE " + Wave, 1.5f, new Color(1f, 0.35f, 0.25f));
     }
 
     void CompleteLevel()
@@ -332,10 +390,15 @@ public class LevelFlowManager : GameSystem
         Spawner.CollapseAll();
         GameAudio.Play(GameAudio.Fanfare, 0.9f);
 
-        MapSites.MarkCleared(Encounter.siteId);
-        MissionSystem.Report(MissionType.ClearSites);
-        LifetimeStats.Add(Stat.SitesCleared);
+        bool hunt = Level.objective == LevelObjective.Hunt;
+        if (!string.IsNullOrEmpty(Encounter.siteId))
+        {
+            MapSites.MarkCleared(Encounter.siteId);
+            MissionSystem.Report(MissionType.ClearSites);
+            LifetimeStats.Add(Stat.SitesCleared);
+        }
         if (Encounter.nest) LifetimeStats.Add(Stat.NestsDestroyed);
+        if (hunt) LifetimeStats.Add(Stat.HuntsCompleted);
         PlayerProfile.AddSupply(Encounter.rewardSupply);
         if (Encounter.rewardTraps > 0) Inventory.Add(ItemId.Trap, Encounter.rewardTraps);
         Progression.AwardXP(Encounter.rewardXP);
@@ -349,7 +412,7 @@ public class LevelFlowManager : GameSystem
             Hud.HideBoss();
             Hud.SetObjective(string.Empty);
             Hud.SetCrosshairVisible(false);
-            Hud.ShowBanner(Encounter.nest ? "NEST DESTROYED" : "SITE CLEARED",
+            Hud.ShowBanner(Encounter.nest ? "NEST DESTROYED" : hunt ? "HUNT COMPLETE" : "SITE CLEARED",
                 "<color=#FFC832>+" + Encounter.rewardSupply + " SP</color>   <color=#5AB4FF>+" + Encounter.rewardXP + " XP</color>" +
                 (Encounter.rewardTraps > 0 ? "\n<color=#66E6FF>+" + Encounter.rewardTraps + " traps</color>" : string.Empty) +
                 "\n\n<size=80%><color=#999999>Tap HOME to return</color></size>", 0f);
@@ -399,8 +462,21 @@ public class LevelFlowManager : GameSystem
             Hud.SetObjective(string.Empty);
             // the results card replaces the prompt's own text, which is hard to read over the camera
             SetPromptTextVisible(Game.youLostPrompt, false);
+            string fell = "Fell on level " + (CurrentLevelIndex + 1) + ": " + Level.title;
+            if (Level.objective == LevelObjective.Endless)
+            {
+                // an Endless run is over when you die; it goes on the board of best runs
+                int place = EndlessScores.Submit(Wave, Score);
+                fell = "Reached <color=#FFC832>wave " + Wave + "</color>" +
+                    (place == 1 ? "   <color=#FFC832>BEST RUN!</color>" : place > 0 ? "   <color=#BBBBBB>#" + place + " of your runs</color>" : string.Empty);
+                Achievements.Check();
+            }
+            else if (Encounter != null)
+            {
+                fell = "Fell at " + Level.title;
+            }
             Hud.ShowResults("YOU DIED", new Color(0.95f, 0.15f, 0.1f),
-                "Fell on level " + (CurrentLevelIndex + 1) + ": " + Level.title +
+                fell +
                 "\n\n<color=#BBBBBB>Kills</color>  " + RunKills +
                 "     <color=#BBBBBB>Accuracy</color>  " + AccuracyPercent() + "%" +
                 "\n<color=#BBBBBB>Score</color>  " + Score.ToString("N0") +

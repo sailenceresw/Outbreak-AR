@@ -35,3 +35,5 @@ Cryo.png: snowflake-1 by Lorc
 Shockwave.png: radioactive by Lorc
 Score.png: star-medal by Delapouite
 Play.png: raise-zombie by Skoll
+Arrow.png: plain-arrow by Delapouite
+Radar.png: radar-sweep by Lorc

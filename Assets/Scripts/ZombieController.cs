@@ -389,7 +389,50 @@ public class ZombieController : MonoBehaviour
             }
         }
 
+        if (IsDormant)
+        {
+            // a hunted zombie is already standing there, idling with its back half-turned
+            transform.position = FloorPosition(transform.position);
+            transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            PlayAnim(IdleState);
+            if (animator != null) animator.speed = 0.6f;
+            return;
+        }
         StartCoroutine(RiseFromGround());
+    }
+
+    // ---------- Hunt ----------
+
+    // hiding and idle until found; set before Start
+    public bool IsDormant { get; private set; }
+
+    public void MakeDormant()
+    {
+        IsDormant = true;
+    }
+
+    // found: it turns, screams and comes for the player, briefly enraged
+    public void Wake()
+    {
+        if (!IsDormant || isDead) return;
+        IsDormant = false;
+        if (animator != null) animator.speed = baseAnimSpeed;
+        rageUntil = Time.time + 2.5f;
+        StartCoroutine(WakeScream());
+    }
+
+    IEnumerator WakeScream()
+    {
+        isRising = true;
+        if (animator != null && animator.HasState(0, Animator.StringToHash(ScreamState))) PlayAnim(ScreamState);
+        Groan(Random.Range(0.75f, 0.9f));
+        for (float t = 0f; t < 0.9f; t += Time.deltaTime)
+        {
+            if (isDead) yield break;
+            FaceCamera();
+            yield return null;
+        }
+        isRising = false;
     }
 
     // claw up out of the floor instead of popping into existence
@@ -501,7 +544,7 @@ public class ZombieController : MonoBehaviour
 
     void Update()
     {
-        if (isDead || isRising || IsBeingCaptured) return;
+        if (isDead || isRising || IsBeingCaptured || IsDormant) return;
         if (mainCamera == null)
         {
             mainCamera = Camera.main;
@@ -682,6 +725,9 @@ public class ZombieController : MonoBehaviour
             Die(hitDirection);
             return true;
         }
+
+        // a hidden zombie that gets shot is very much awake
+        if (IsDormant) Wake();
 
         if (IsBoss && !IsEnraged && zombieHealth <= MaxHealth * 0.5f)
         {

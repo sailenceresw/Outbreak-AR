@@ -13,13 +13,14 @@ public class HomeScreen : MonoBehaviour
     TMP_Text missionsLabel;
     TMP_Text dexLabel;
     TMP_Text mapLabel;
+    TMP_Text endlessLabel;
     Image avatarImage;
     Image xpFill;
     RectTransform root;
     GameObject settingsPanel;
 
     public static HomeScreen Show(Canvas canvas, TMP_Text template, Action onPlay, Action onMap,
-        Action onLevels, Action onMissions, Action onShop, Action onDex)
+        Action onLevels, Action onMissions, Action onShop, Action onDex, Action onEndless, Action onHunt)
     {
         GameObject panel = new GameObject("HomeScreen", typeof(RectTransform));
         RectTransform rect = panel.GetComponent<RectTransform>();
@@ -30,12 +31,12 @@ public class HomeScreen : MonoBehaviour
         HomeScreen home = panel.AddComponent<HomeScreen>();
         home.template = template;
         home.root = rect;
-        home.Build(onPlay, onMap, onLevels, onMissions, onShop, onDex);
+        home.Build(onPlay, onMap, onLevels, onMissions, onShop, onDex, onEndless, onHunt);
         home.Refresh();
         return home;
     }
 
-    void Build(Action onPlay, Action onMap, Action onLevels, Action onMissions, Action onShop, Action onDex)
+    void Build(Action onPlay, Action onMap, Action onLevels, Action onMissions, Action onShop, Action onDex, Action onEndless, Action onHunt)
     {
         // darken the camera behind the menu so it reads, but keep the room visible
         RawImage shade = NewShade(new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(0f, 0f, 0f, 0.55f));
@@ -119,11 +120,13 @@ public class HomeScreen : MonoBehaviour
         playLabel = play.GetComponentInChildren<TMP_Text>();
         Button map = AddButton("WORLD MAP", UIStyle.Toxic, 30f, 0.435f, 0.51f, onMap, icon: "Map");
         mapLabel = map.GetComponentInChildren<TMP_Text>();
-        AddButton("LEVELS", UIStyle.Steel, 22f, 0.355f, 0.42f, onLevels, 0.12f, 0.49f, "Levels");
-        missionsLabel = AddButton("MISSIONS", UIStyle.Gold, 22f, 0.355f, 0.42f, onMissions, 0.51f, 0.88f, "Missions").GetComponentInChildren<TMP_Text>();
-        AddButton("SHOP", UIStyle.Gold, 22f, 0.275f, 0.34f, onShop, 0.12f, 0.49f, "Shop");
-        dexLabel = AddButton("ZOMBIE-DEX", new Color(0.3f, 0.9f, 1f), 22f, 0.275f, 0.34f, onDex, 0.51f, 0.88f, "Dex").GetComponentInChildren<TMP_Text>();
-        AddButton("SETTINGS", UIStyle.Steel, 20f, 0.2f, 0.255f, ShowSettings, icon: "Settings");
+        endlessLabel = AddButton("ENDLESS", new Color(0.95f, 0.35f, 0.15f), 22f, 0.36f, 0.425f, onEndless, 0.12f, 0.49f, "Shockwave").GetComponentInChildren<TMP_Text>();
+        AddButton("HUNT", new Color(0.85f, 0.2f, 0.2f), 22f, 0.36f, 0.425f, onHunt, 0.51f, 0.88f, "Radar");
+        AddButton("LEVELS", UIStyle.Steel, 22f, 0.285f, 0.35f, onLevels, 0.12f, 0.49f, "Levels");
+        missionsLabel = AddButton("MISSIONS", UIStyle.Gold, 22f, 0.285f, 0.35f, onMissions, 0.51f, 0.88f, "Missions").GetComponentInChildren<TMP_Text>();
+        AddButton("SHOP", UIStyle.Gold, 22f, 0.21f, 0.275f, onShop, 0.12f, 0.49f, "Shop");
+        dexLabel = AddButton("ZOMBIE-DEX", new Color(0.3f, 0.9f, 1f), 22f, 0.21f, 0.275f, onDex, 0.51f, 0.88f, "Dex").GetComponentInChildren<TMP_Text>();
+        AddButton("SETTINGS", UIStyle.Steel, 20f, 0.14f, 0.195f, ShowSettings, icon: "Settings");
 
         TMP_Text hint = NewText(root, "Find a clear floor space. Zombies will rise from it.", 18f, FontStyles.Normal, new Vector2(0.05f, 0.07f), new Vector2(0.95f, 0.12f));
         hint.color = new Color(1f, 1f, 1f, 0.55f);
@@ -163,6 +166,8 @@ public class HomeScreen : MonoBehaviour
         missionsLabel.text = ready > 0 ? "MISSIONS  (" + ready + ")" : "MISSIONS";
         dexLabel.text = "ZOMBIE-DEX  <size=80%>" + ZombieDex.SpeciesCaught + "/" + ZombieDex.CatchableSpecies + "</size>";
         mapLabel.text = "WORLD MAP\n<size=50%><color=#DDDDDD>Walk to outbreak sites and caches</color></size>";
+        int bestWave = EndlessScores.BestWave;
+        endlessLabel.text = bestWave > 0 ? "ENDLESS  <size=70%><color=#FFC832>W" + bestWave + "</color></size>" : "ENDLESS";
     }
 
     void OpenProfile()

@@ -203,6 +203,8 @@ public class ProfileMenu : MonoBehaviour
             ("Nests destroyed", LifetimeStats.Get(Stat.NestsDestroyed).ToString("N0")),
             ("Distance walked", km.ToString("0.0") + " km"),
             ("Time in fights", LifetimeStats.TimePlayedLabel),
+            ("Endless best", EndlessScores.BestWave > 0 ? "Wave " + EndlessScores.BestWave + "  ·  " + EndlessScores.Top[0].score.ToString("N0") : "-"),
+            ("Hunts completed", LifetimeStats.Get(Stat.HuntsCompleted).ToString("N0")),
         };
 
         const int columns = 2;
