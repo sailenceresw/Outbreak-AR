@@ -86,6 +86,38 @@ public class ARWorld : MonoBehaviour
         }
     }
 
+    // true when a point (any height) stands over real floor ARCore has mapped; also true before any
+    // floor is known, so spawning still works in an unscanned room
+    public static bool IsOverFloor(Vector3 point)
+    {
+        if (Instance == null || Instance.planes == null || !Instance.hasFloor) return true;
+        foreach (ARPlane plane in Instance.planes.trackables)
+        {
+            if (plane.alignment != PlaneAlignment.HorizontalUp) continue;
+            if (plane.trackingState != TrackingState.Tracking) continue;
+            // only floor-level planes, not tables or beds
+            if (Mathf.Abs(plane.center.y - Instance.floorY) > 0.2f) continue;
+            Vector3 local = plane.transform.InverseTransformPoint(point);
+            if (InsidePolygon(new Vector2(local.x, local.z), plane.boundary)) return true;
+        }
+        return false;
+    }
+
+    // even-odd test against a plane's boundary, which ARCore gives in the plane's own XZ space
+    static bool InsidePolygon(Vector2 point, Unity.Collections.NativeArray<Vector2> polygon)
+    {
+        bool inside = false;
+        for (int i = 0, j = polygon.Length - 1; i < polygon.Length; j = i++)
+        {
+            Vector2 a = polygon[i], b = polygon[j];
+            if ((a.y > point.y) != (b.y > point.y) && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x)
+            {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
     // the lowest large horizontal plane below the camera is the floor
     void UpdateFloor()
     {

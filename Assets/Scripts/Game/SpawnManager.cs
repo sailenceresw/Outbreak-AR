@@ -9,8 +9,13 @@ public class SpawnManager : GameSystem
     // a zombie died (raised for every death; handlers check whether a fight is on)
     public event System.Action<ZombieController> ZombieKilled;
 
+    // how long a spawn spot is marked before the zombie rises
+    const float SpawnWarningSeconds = 1.5f;
+
     readonly List<ZombieController> aliveZombies = new List<ZombieController>();
     int zombiesSpawned;
+    // marked spots whose zombie hasn't risen yet; they count toward the alive cap
+    int pendingSpawns;
     ZombieController boss;
     bool bossSpawned;
     float bossSpawnTime;
@@ -38,6 +43,7 @@ public class SpawnManager : GameSystem
     void ResetForLevel()
     {
         zombiesSpawned = 0;
+        pendingSpawns = 0;
         boss = null;
         bossSpawned = false;
         if (hordeRoutine != null) StopCoroutine(hordeRoutine);
@@ -73,21 +79,74 @@ public class SpawnManager : GameSystem
 
         if (Time.time < nextSpawnTime) return;
         int maxAlive = level.maxAlive + (boss != null && !boss.IsDead ? 1 : 0);
-        if (aliveZombies.Count >= maxAlive) return;
+        if (aliveZombies.Count + pendingSpawns >= maxAlive) return;
         if (level.objective != LevelObjective.Survive && zombiesSpawned >= level.zombieCount) return;
 
-        SpawnZombie(RollZombieType(), RingPosition(SpawnAngle()), true);
+        // early levels spawn in front so new players see what's attacking them; later ones come from
+        // out of view and walk in. Either way the spot is marked first, so nothing pops up unannounced.
+        bool inFront = Flow.CurrentLevelIndex < Game.frontSpawnLevels;
+        StartCoroutine(SpawnWithWarning(RollZombieType(), ChooseSpawnPoint(inFront)));
+        zombiesSpawned++;
         nextSpawnTime = Time.time + Random.Range(level.spawnInterval.x, level.spawnInterval.y);
     }
 
-    // early levels spawn in front so new players see what's attacking them; later levels surround
-    float SpawnAngle()
+    // where the camera faces on the floor plane, in radians (matching RingPosition's angle)
+    float FacingAngle()
     {
-        if (Flow.CurrentLevelIndex >= Game.frontSpawnLevels || MainCamera == null) return Random.Range(0f, Mathf.PI * 2f);
-
         Vector3 forward = MainCamera.transform.forward;
-        float facing = Mathf.Atan2(forward.z, forward.x);
-        return facing + Random.Range(-Game.frontSpawnHalfAngle, Game.frontSpawnHalfAngle) * Mathf.Deg2Rad;
+        return Mathf.Atan2(forward.z, forward.x);
+    }
+
+    // half the screen's width as an angle, plus a margin so zombies rise just out of sight
+    float OutOfViewAngle()
+    {
+        float horizontalFov = Camera.VerticalToHorizontalFieldOfView(MainCamera.fieldOfView, MainCamera.aspect);
+        return Mathf.Min(horizontalFov * 0.5f + 15f, 150f);
+    }
+
+    // a spot on real floor: in front (within frontSpawnHalfAngle) or anywhere out of view.
+    // Prefers mapped floor and tries closer in if the room is small; falls back to the plain ring.
+    Vector3 ChooseSpawnPoint(bool inFront)
+    {
+        if (MainCamera == null) return RingPosition(Random.Range(0f, Mathf.PI * 2f));
+
+        float facing = FacingAngle();
+        float hidden = OutOfViewAngle();
+        Vector3 first = Vector3.zero;
+        for (int i = 0; i < 24; i++)
+        {
+            float offset = inFront
+                ? Random.Range(-Game.frontSpawnHalfAngle, Game.frontSpawnHalfAngle)
+                : (Random.value < 0.5f ? -1f : 1f) * Random.Range(hidden, 180f);
+            // later tries come closer, for rooms smaller than the spawn ring
+            float near = i < 12 ? Game.spawnDistanceRange.x : 1.8f;
+            Vector3 point = RingPosition(facing + offset * Mathf.Deg2Rad, Random.Range(near, Game.spawnDistanceRange.y));
+            if (i == 0) first = point;
+            if (ARWorld.IsOverFloor(point)) return point;
+        }
+        return first;
+    }
+
+    // blood seeps up and a groan comes from the spot, then the zombie claws out of the floor there
+    IEnumerator SpawnWithWarning(ZombieType type, Vector3 position)
+    {
+        pendingSpawns++;
+        Vector3 floor = new Vector3(position.x, ARWorld.FloorY, position.z);
+        GameFX.BloodPool(floor, 0.55f);
+        GameFX.Dust(floor, 0.6f);
+        AudioClip groan = GroanClip();
+        if (groan != null) GameAudio.PlayAt(groan, floor, 0.9f, Random.Range(0.7f, 0.85f));
+
+        yield return new WaitForSeconds(SpawnWarningSeconds);
+        pendingSpawns = Mathf.Max(pendingSpawns - 1, 0);
+        // already counted toward the level when it was queued
+        if (Flow.IsPlaying) SpawnZombie(type, position, false);
+    }
+
+    AudioClip GroanClip()
+    {
+        AudioSource source = Game.zombiePrefab != null ? Game.zombiePrefab.GetComponent<AudioSource>() : null;
+        return source != null ? source.clip : null;
     }
 
     ZombieType RollZombieType()
@@ -108,8 +167,12 @@ public class SpawnManager : GameSystem
 
     Vector3 RingPosition(float angle)
     {
+        return RingPosition(angle, Random.Range(Game.spawnDistanceRange.x, Game.spawnDistanceRange.y));
+    }
+
+    Vector3 RingPosition(float angle, float distance)
+    {
         Vector3 cameraPosition = MainCamera != null ? MainCamera.transform.position : Vector3.zero;
-        float distance = Random.Range(Game.spawnDistanceRange.x, Game.spawnDistanceRange.y);
         return cameraPosition + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
     }
 
@@ -211,7 +274,10 @@ public class SpawnManager : GameSystem
         yield return new WaitForSeconds(2.5f);
 
         LevelDefinition level = Flow.Level;
-        float angle = Random.Range(0f, Mathf.PI * 2f);
+        // the pack charges in from out of view, so the siren is the warning and the turn is the scare
+        float angle = MainCamera != null
+            ? FacingAngle() + (Random.value < 0.5f ? -1f : 1f) * Random.Range(OutOfViewAngle() + 10f, 170f) * Mathf.Deg2Rad
+            : Random.Range(0f, Mathf.PI * 2f);
         int count = 4 + Flow.CurrentLevelIndex / 3;
         if (level.objective == LevelObjective.Eliminate)
         {
@@ -258,6 +324,7 @@ public class SpawnManager : GameSystem
     {
         StopAllCoroutines();
         HordeActive = false;
+        pendingSpawns = 0;
         foreach (ZombieController zombie in aliveZombies)
         {
             if (zombie != null) Destroy(zombie.gameObject);
