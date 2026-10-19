@@ -62,6 +62,15 @@ public class ProfileMenu : MonoBehaviour
         BuildAvatarPicker();
         BuildStats();
 
+        Button achievements = UIStyle.NewButton(content, template,
+            "ACHIEVEMENTS  " + Achievements.UnlockedCount + " / " + Achievements.All.Length, UIStyle.Gold, 22f, () =>
+            {
+                Canvas canvas = GetComponentInParent<Canvas>();
+                if (canvas != null) AchievementsMenu.Show(canvas.rootCanvas, template, Rebuild);
+            });
+        Stretch((RectTransform)achievements.transform, new Vector2(0.12f, 0.11f), new Vector2(0.88f, 0.175f));
+        UIStyle.AddIcon(achievements, "Achievements");
+
         Button close = UIStyle.NewButton(content, template, "CLOSE", UIStyle.Blood, 24f, Close);
         Stretch((RectTransform)close.transform, new Vector2(0.3f, 0.035f), new Vector2(0.7f, 0.095f));
         UIStyle.AddIcon(close, "Back");
@@ -198,7 +207,7 @@ public class ProfileMenu : MonoBehaviour
 
         const int columns = 2;
         int rows = Mathf.CeilToInt(stats.Length / (float)columns);
-        float top = 0.56f, bottom = 0.115f;
+        float top = 0.56f, bottom = 0.19f;
         float height = (top - bottom) / rows;
         for (int i = 0; i < stats.Length; i++)
         {

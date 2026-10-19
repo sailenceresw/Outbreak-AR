@@ -102,6 +102,11 @@ public class UIController : GameSystem
         CreatePauseButton();
         CreateHomeButton();
         AddButtonIcons();
+
+        // achievement banners over every screen; anything already earned pays out now
+        Canvas canvas = SceneCanvas;
+        if (canvas != null) AchievementToast.Attach(canvas.rootCanvas, Game.playerHealthText);
+        Achievements.Listen();
         if (!skipGreeting) ShowHomeScreen();
     }
 

@@ -19,6 +19,7 @@ public enum Stat
     DistanceWalked,
     // seconds spent in fights
     TimePlayed,
+    CampaignWins,
 }
 
 // Lifetime totals for the profile screen and achievements, saved on the device.

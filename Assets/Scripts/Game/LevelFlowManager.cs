@@ -359,6 +359,7 @@ public class LevelFlowManager : GameSystem
     IEnumerator Victory()
     {
         SetState(GameState.Won);
+        LifetimeStats.Add(Stat.CampaignWins);
         bool newHighScore = GameProgress.SubmitHighScore(Score);
         if (Hud != null)
         {

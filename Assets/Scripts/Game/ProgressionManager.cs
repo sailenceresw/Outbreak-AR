@@ -39,6 +39,8 @@ public class ProgressionManager : GameSystem
     public void RefreshXP()
     {
         XPChanged?.Invoke();
+        // survivor level and campaign progress aren't lifetime stats, so check those achievements here
+        Achievements.Check();
     }
 
     void OnLevelsGained(int levels)
