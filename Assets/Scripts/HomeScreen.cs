@@ -131,20 +131,25 @@ public class HomeScreen : MonoBehaviour
         GameObject card = new GameObject("Card", typeof(RectTransform));
         RectTransform cardRect = card.GetComponent<RectTransform>();
         cardRect.SetParent(panel, false);
-        Stretch(cardRect, new Vector2(0.1f, 0.3f), new Vector2(0.9f, 0.7f));
+        Stretch(cardRect, new Vector2(0.1f, 0.26f), new Vector2(0.9f, 0.74f));
         UIStyle.AddPanel(card, UIStyle.Panel);
 
-        TMP_Text title = NewText(cardRect, "SETTINGS", 36f, FontStyles.Bold, new Vector2(0f, 0.82f), new Vector2(1f, 0.96f));
+        TMP_Text title = NewText(cardRect, "SETTINGS", 36f, FontStyles.Bold, new Vector2(0f, 0.85f), new Vector2(1f, 0.97f));
         title.characterSpacing = 8f;
 
-        Button sound = null, vibration = null, reset = null;
+        Button sound = null, vibration = null, graphics = null, reset = null;
         bool confirmReset = false;
-        sound = CardButton(cardRect, SoundLabel(), UIStyle.XP, 0.6f, () =>
+        sound = CardButton(cardRect, SoundLabel(), UIStyle.XP, 0.68f, () =>
         {
             GameSettings.Sound = !GameSettings.Sound;
             sound.GetComponentInChildren<TMP_Text>().text = SoundLabel();
         });
-        vibration = CardButton(cardRect, VibrationLabel(), UIStyle.XP, 0.42f, () =>
+        graphics = CardButton(cardRect, GraphicsLabel(), UIStyle.XP, 0.53f, () =>
+        {
+            GameSettings.Quality = GameSettings.HighQuality ? GraphicsQuality.Low : GraphicsQuality.High;
+            graphics.GetComponentInChildren<TMP_Text>().text = GraphicsLabel();
+        });
+        vibration = CardButton(cardRect, VibrationLabel(), UIStyle.XP, 0.38f, () =>
         {
             GameSettings.Vibration = !GameSettings.Vibration;
             vibration.GetComponentInChildren<TMP_Text>().text = VibrationLabel();
@@ -152,7 +157,7 @@ public class HomeScreen : MonoBehaviour
             if (GameSettings.Vibration) Handheld.Vibrate();
 #endif
         });
-        reset = CardButton(cardRect, "RESET PROGRESS", UIStyle.Blood, 0.24f, () =>
+        reset = CardButton(cardRect, "RESET PROGRESS", UIStyle.Blood, 0.21f, () =>
         {
             // two taps so it can't happen by accident
             if (!confirmReset)
@@ -167,16 +172,20 @@ public class HomeScreen : MonoBehaviour
             Refresh();
             Destroy(settingsPanel);
         });
-        CardButton(cardRect, "CLOSE", UIStyle.Steel, 0.06f, () => Destroy(settingsPanel));
+        CardButton(cardRect, "CLOSE", UIStyle.Steel, 0.04f, () => Destroy(settingsPanel));
     }
 
     static string SoundLabel() => "SOUND:  " + (GameSettings.Sound ? "ON" : "OFF");
+    static string GraphicsLabel() => GameSettings.HighQuality
+        ? "GRAPHICS:  HIGH  <size=70%>(60 FPS)</size>"
+        : "GRAPHICS:  LOW  <size=70%>(battery saver)</size>";
     static string VibrationLabel() => "VIBRATION:  " + (GameSettings.Vibration ? "ON" : "OFF");
 
     Button CardButton(RectTransform card, string label, Color accent, float bottom, Action onClick)
     {
         Button button = UIStyle.NewButton(card, template, label, accent, 22f, onClick);
-        Stretch((RectTransform)button.transform, new Vector2(0.08f, bottom), new Vector2(0.92f, bottom + 0.14f));
+        Stretch((RectTransform)button.transform, new Vector2(0.08f, bottom), new Vector2(0.92f, bottom + 0.12f));
+        button.GetComponentInChildren<TMP_Text>().richText = true;
         return button;
     }
 

@@ -9,6 +9,7 @@ public class PostFX : MonoBehaviour
     public static PostFX Instance { get; private set; }
 
     Bloom bloom;
+    FilmGrain grain;
     Vignette vignette;
     ChromaticAberration aberration;
     ColorAdjustments colorAdjustments;
@@ -23,13 +24,24 @@ public class PostFX : MonoBehaviour
         GameObject holder = new GameObject("PostFX");
         PostFX fx = holder.AddComponent<PostFX>();
         fx.Build(holder);
+        fx.ApplyQuality();
+        GameSettings.QualityChanged += fx.ApplyQuality;
         Instance = fx;
         return fx;
     }
 
     void OnDestroy()
     {
+        GameSettings.QualityChanged -= ApplyQuality;
         if (Instance == this) Instance = null;
+    }
+
+    // bloom and film grain are the costly passes; Low quality drops them
+    void ApplyQuality()
+    {
+        bool high = GameSettings.HighQuality;
+        bloom.active = high;
+        grain.active = high;
     }
 
     void Build(GameObject holder)
@@ -55,7 +67,7 @@ public class PostFX : MonoBehaviour
         vignette.smoothness.Override(0.45f);
         vignette.color.Override(Color.black);
 
-        FilmGrain grain = profile.Add<FilmGrain>(true);
+        grain = profile.Add<FilmGrain>(true);
         grain.type.Override(FilmGrainLookup.Thin1);
         grain.intensity.Override(0.22f);
         grain.response.Override(0.8f);
