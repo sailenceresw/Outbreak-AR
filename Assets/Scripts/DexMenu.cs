@@ -85,18 +85,51 @@ public class DexMenu : MonoBehaviour
         stripeImage.color = known ? rarityColor : new Color(0.25f, 0.25f, 0.25f);
         stripeImage.raycastTarget = false;
 
-        TMP_Text name = NewText(rect, known ? entry.name.ToUpper() : "???", 24f, FontStyles.Bold, new Vector2(0.05f, 0.7f), new Vector2(0.95f, 0.88f));
-        TMP_Text rarity = NewText(rect, entry.rarity.ToString().ToUpper(), 15f, FontStyles.Bold, new Vector2(0.05f, 0.6f), new Vector2(0.95f, 0.7f));
+        TMP_Text name = NewText(rect, known ? entry.name.ToUpper() : "???", 26f, FontStyles.Bold, new Vector2(0.05f, 0.74f), new Vector2(0.95f, 0.88f));
+        name.enableAutoSizing = true;
+        name.fontSizeMin = 16f;
+        name.fontSizeMax = 26f;
+
+        // the portrait on the left: the zombie itself once seen, a black silhouette until then;
+        // a caught mutant swaps in its purple portrait
+        Sprite portrait = Portrait(entry.type, mutants > 0);
+        if (portrait != null)
+        {
+            GameObject picture = new GameObject("Portrait", typeof(RectTransform));
+            RectTransform pictureRect = picture.GetComponent<RectTransform>();
+            pictureRect.SetParent(rect, false);
+            Stretch(pictureRect, new Vector2(0.02f, 0.03f), new Vector2(0.46f, 0.74f));
+            Image image = picture.AddComponent<Image>();
+            image.sprite = portrait;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            image.color = known ? Color.white : new Color(0f, 0f, 0f, 0.92f);
+        }
+
+        TMP_Text rarity = NewText(rect, entry.rarity.ToString().ToUpper(), 16f, FontStyles.Bold, new Vector2(0.48f, 0.6f), new Vector2(0.97f, 0.72f));
         rarity.color = known ? rarityColor : new Color(0.4f, 0.4f, 0.4f);
-        rarity.characterSpacing = 6f;
+        rarity.characterSpacing = 4f;
 
         string stats = !entry.catchable ? (known ? "<color=#FFB040>Can't be trapped</color>" : string.Empty)
-            : "Caught  <b>" + caught + "</b>" + (mutants > 0 ? "\n<color=#C080FF>Mutant caught  x" + mutants + "</color>" : "\n<color=#555555>Mutant not found</color>");
-        NewText(rect, stats, 17f, FontStyles.Normal, new Vector2(0.05f, 0.34f), new Vector2(0.95f, 0.6f));
+            : "Caught  <b>" + caught + "</b>" + (mutants > 0 ? "\n<color=#C080FF>Mutant  x" + mutants + "</color>" : "\n<color=#555555>Mutant not found</color>");
+        TMP_Text statsText = NewText(rect, stats, 18f, FontStyles.Normal, new Vector2(0.48f, 0.36f), new Vector2(0.97f, 0.6f));
+        statsText.enableAutoSizing = true;
+        statsText.fontSizeMin = 12f;
+        statsText.fontSizeMax = 18f;
 
-        TMP_Text description = NewText(rect, known ? entry.description : "Not encountered yet.", 14f, FontStyles.Normal,
-            new Vector2(0.07f, 0.04f), new Vector2(0.93f, 0.34f));
-        description.color = new Color(1f, 1f, 1f, 0.55f);
+        TMP_Text description = NewText(rect, known ? entry.description : "Not encountered yet.", 15f, FontStyles.Normal,
+            new Vector2(0.48f, 0.04f), new Vector2(0.97f, 0.36f));
+        description.color = new Color(1f, 1f, 1f, 0.6f);
+        description.enableAutoSizing = true;
+        description.fontSizeMin = 10f;
+        description.fontSizeMax = 15f;
+    }
+
+    // rendered from the 3D models in the editor (Tools > Outbreak > Render Dex Portraits)
+    static Sprite Portrait(ZombieType type, bool mutant)
+    {
+        Sprite sprite = mutant ? Resources.Load<Sprite>("DexPortraits/" + type + "_Mutant") : null;
+        return sprite != null ? sprite : Resources.Load<Sprite>("DexPortraits/" + type);
     }
 
     void Close()

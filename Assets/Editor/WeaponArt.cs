@@ -271,26 +271,37 @@ public static class WeaponArt
         fill.intensity = 0.6f;
         fill.transform.rotation = Quaternion.LookRotation(-forward + Vector3.down * 0.3f);
 
-        RenderTexture target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
-        target.antiAliasing = 8;
-        camera.targetTexture = target;
-        camera.Render();
-
-        RenderTexture.active = target;
-        Texture2D picture = new Texture2D(width, height, TextureFormat.RGBA32, false);
-        picture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-        picture.Apply();
-        RenderTexture.active = null;
+        Texture2D picture = Supersample(camera, width, height);
         File.WriteAllBytes(pngPath, picture.EncodeToPNG());
 
-        camera.targetTexture = null;
         Object.DestroyImmediate(picture);
-        Object.DestroyImmediate(target);
         Object.DestroyImmediate(cameraObject);
         Object.DestroyImmediate(keyObject);
         Object.DestroyImmediate(fillObject);
         Object.DestroyImmediate(instance);
         return bounds;
+    }
+
+    // renders at twice the size and averages down: smooth edges without the sparkles MSAA leaves on speculars
+    public static Texture2D Supersample(Camera camera, int width, int height)
+    {
+        camera.aspect = width / (float)height;
+        RenderTexture large = new RenderTexture(width * 2, height * 2, 24, RenderTextureFormat.ARGB32);
+        RenderTexture small = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32);
+        large.filterMode = FilterMode.Bilinear;
+        camera.targetTexture = large;
+        camera.Render();
+        camera.targetTexture = null;
+        Graphics.Blit(large, small);
+
+        RenderTexture.active = small;
+        Texture2D picture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        picture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+        picture.Apply();
+        RenderTexture.active = null;
+        Object.DestroyImmediate(large);
+        Object.DestroyImmediate(small);
+        return picture;
     }
 
     static Vector3 Abs(Vector3 v) => new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z));
