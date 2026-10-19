@@ -5,6 +5,7 @@ public static class GameFX
 {
     static Material particleMaterial;
     static Texture2D whiteTexture, ringTexture, arrowTexture, vignetteTexture, topShadeTexture;
+    static Texture2D[] splatTextures;
     static Sprite whiteSprite, ringSprite, arrowSprite;
 
     static Material ParticleMaterial
@@ -20,8 +21,56 @@ public static class GameFX
 
     public static void Blood(Vector3 position, Vector3 direction, bool headshot)
     {
-        Burst(position, direction, new Color(0.45f, 0f, 0f, 1f), headshot ? 40 : 18,
-            headshot ? 3.5f : 2.2f, headshot ? 0.09f : 0.06f, 0.7f, 1.2f, 70f);
+        // droplets that arc out and fall, plus a short-lived red mist
+        Burst(position, direction, new Color(0.5f, 0f, 0f, 1f), headshot ? 60 : 32,
+            headshot ? 4f : 2.8f, headshot ? 0.07f : 0.05f, 0.9f, 1.4f, 60f);
+        Burst(position, direction, new Color(0.4f, 0.02f, 0.02f, 0.55f), 10, 0.8f,
+            headshot ? 0.32f : 0.22f, 0.5f, 0.1f, 120f);
+    }
+
+    // headshot kill: a heavy spray, dark chunks and a lingering mist
+    public static void HeadBurst(Vector3 position, Vector3 direction)
+    {
+        Burst(position, direction + Vector3.up * 0.5f, new Color(0.55f, 0f, 0f, 1f), 140, 5.5f, 0.08f, 1.1f, 1.6f, 160f);
+        Burst(position, Vector3.up, new Color(0.22f, 0.02f, 0.02f, 1f), 24, 3f, 0.12f, 1.2f, 2f, 140f);
+        Burst(position, direction, new Color(0.45f, 0.02f, 0.02f, 0.6f), 14, 1.2f, 0.45f, 0.8f, 0.1f, 160f);
+    }
+
+    // procedural blood splats for the screen when the player is hit
+    public static Texture2D SplatTexture(int variant)
+    {
+        if (splatTextures == null) splatTextures = new Texture2D[3];
+        variant = Mathf.Abs(variant) % splatTextures.Length;
+        if (splatTextures[variant] != null) return splatTextures[variant];
+
+        System.Random random = new System.Random(17 + variant * 31);
+        // a blob with uneven lobes, plus a few satellite droplets
+        float[] lobes = new float[7];
+        for (int i = 0; i < lobes.Length; i++) lobes[i] = (float)random.NextDouble() * 0.35f;
+        Vector3[] drops = new Vector3[9];
+        for (int i = 0; i < drops.Length; i++)
+        {
+            float angle = (float)random.NextDouble() * Mathf.PI * 2f;
+            float distance = 0.55f + (float)random.NextDouble() * 0.35f;
+            drops[i] = new Vector3(Mathf.Cos(angle) * distance, Mathf.Sin(angle) * distance, 0.04f + (float)random.NextDouble() * 0.07f);
+        }
+
+        splatTextures[variant] = NewTexture(128, (x, y) =>
+        {
+            float u = (x - 63.5f) / 63.5f, v = (y - 63.5f) / 63.5f;
+            float angle = Mathf.Atan2(v, u);
+            float radius = 0.35f;
+            for (int i = 0; i < lobes.Length; i++) radius += lobes[i] * Mathf.Pow(Mathf.Max(0f, Mathf.Cos(angle * (i + 2) + i)), 3f);
+            float distance = Mathf.Sqrt(u * u + v * v);
+            float alpha = Mathf.Clamp01((radius - distance) * 25f);
+            foreach (Vector3 drop in drops)
+            {
+                float dx = u - drop.x, dy = v - drop.y;
+                alpha = Mathf.Max(alpha, Mathf.Clamp01((drop.z - Mathf.Sqrt(dx * dx + dy * dy)) * 40f));
+            }
+            return alpha;
+        });
+        return splatTextures[variant];
     }
 
     public static void MuzzleFlash(Vector3 position, Vector3 direction, bool big = false)

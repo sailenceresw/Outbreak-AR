@@ -107,13 +107,10 @@ public class ARLighting : MonoBehaviour
         if (floor != null)
         {
             Vector3 position = transform.position;
-            floor.position = new Vector3(position.x, floor.position.y, position.z);
+            // sit a hair above the real floor so the shadows don't flicker against it
+            float y = ARWorld.Instance != null ? ARWorld.FloorY + 0.005f : floor.position.y;
+            floor.position = new Vector3(position.x, y, position.z);
         }
-    }
-
-    public void SetFloorHeight(float y)
-    {
-        if (floor != null) floor.position = new Vector3(floor.position.x, y, floor.position.z);
     }
 
     void CreateShadowFloor(Camera arCamera, float floorBelowCamera)

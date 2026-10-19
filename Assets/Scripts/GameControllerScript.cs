@@ -9,9 +9,8 @@ using TMPro;
 public class GameControllerScript : MonoBehaviour
 {
     public enum GameState { Intro, Scanning, LevelIntro, Playing, LevelComplete, Won, Lost }
-    public enum WeaponType { Pistol, Shotgun }
     // what dealt the damage that's being applied right now, so kills can count toward missions
-    enum DamageSource { Other, Pistol, Shotgun, Grenade }
+    enum DamageSource { Other, Gun, Grenade }
 
     const float ComboWindow = 2.5f;
     const int MaxCombo = 5;
@@ -55,7 +54,6 @@ public class GameControllerScript : MonoBehaviour
     // range of LevelCatalog levels played in this scene
     public int firstLevel = 0;
     public int lastLevel = 3;
-    public int startingAmmo = 20;
     public float maxPlayerHealth = 100f;
     public float healBetweenLevels = 25f;
     public Vector2 spawnDistanceRange = new Vector2(4f, 5f);
@@ -63,27 +61,10 @@ public class GameControllerScript : MonoBehaviour
     public int frontSpawnLevels = 2;
     public float frontSpawnHalfAngle = 60f;
 
+    // gun stats live in Arsenal; these only shape the shot itself
     [Header("Shooting")]
     public float bulletSpeed = 40f;
-    public float fireCooldown = 0.2f;
-    public float rapidFireCooldown = 0.08f;
     public float shotRadius = 0.08f;
-    public float maxShotDistance = 30f;
-    public float bulletDamage = 50f;
-    public float headshotMultiplier = 2f;
-    public float gunRecoilAngle = 8f;
-
-    [Header("Shotgun")]
-    public int shotgunPellets = 8;
-    public float shotgunPelletDamage = 22f;
-    public float shotgunSpreadAngle = 6f;
-    public float shotgunCooldown = 0.85f;
-    public float shotgunRange = 12f;
-    // full damage up to this distance, falling to 40% at max range
-    public float shotgunFalloffStart = 3f;
-    public float shotgunRecoilAngle = 18f;
-    public int startingShells = 6;
-    public int shellsPerCrate = 3;
 
     [Header("Grenades")]
     // topped up to this many at the start of each level
@@ -112,7 +93,12 @@ public class GameControllerScript : MonoBehaviour
     public int AmmoCount { get; private set; }
     public int ShellCount { get; private set; }
     public int GrenadeCount { get; private set; }
-    public WeaponType CurrentWeapon { get; private set; } = WeaponType.Pistol;
+    // which of the two equipped guns is in the player's hands
+    public WeaponSlot CurrentSlot { get; private set; } = WeaponSlot.Sidearm;
+    WeaponDefinition sidearm;
+    WeaponDefinition heavy;
+    WeaponDefinition ActiveWeapon => CurrentSlot == WeaponSlot.Heavy ? heavy : sidearm;
+    bool HoldingHeavy => CurrentSlot == WeaponSlot.Heavy;
     public float PlayerHealth { get; private set; }
     public int ZombiesKilled { get; private set; }
     public int Score { get; private set; }
@@ -146,7 +132,11 @@ public class GameControllerScript : MonoBehaviour
     int levelStartShells;
     int startLevelIndex;
     bool levelChosen;
-    bool shotgunUnlocked;
+    // the heavy slot opens on the shotgun's campaign level
+    bool heavyUnlocked;
+    bool triggerHeld;
+    HomeScreen homeScreen;
+    Coroutine timeRoutine;
     GameObject swapButton;
     GameObject grenadeButton;
     TMP_Text grenadeButtonLabel;
@@ -188,6 +178,7 @@ public class GameControllerScript : MonoBehaviour
     // feedback
     float infoMessageUntil;
     float nextReserveRoundTime;
+    float nextScreenBloodTime;
     float nextHapticTime;
     float nextHeartbeatTime;
     float baseMusicVolume = 0.7f;
@@ -251,6 +242,10 @@ public class GameControllerScript : MonoBehaviour
         maxPlayerHealth += PlayerProfile.BonusMaxHealth;
         int streakBonus = PlayerProfile.RegisterPlayToday();
         MissionSystem.MissionCompleted += OnMissionCompleted;
+        GameSettings.Apply();
+        Time.timeScale = 1f;
+        LoadEquippedWeapons();
+        StartAmbience();
 
         bool fromLevelSelect = pendingStartLevel >= 0;
         startLevelIndex = fromLevelSelect ? pendingStartLevel : firstLevel;
@@ -258,13 +253,13 @@ public class GameControllerScript : MonoBehaviour
         if (continuingChapter && !fromLevelSelect)
         {
             Score = carriedScore;
-            AmmoCount = Mathf.Max(carriedAmmo, startingAmmo);
+            AmmoCount = Mathf.Max(carriedAmmo, StartingAmmo(sidearm));
             ShellCount = carriedShells;
             GrenadeCount = carriedGrenades;
             runKills = carriedKills;
             shotsFired = carriedShotsFired;
             shotsHit = carriedShotsHit;
-            shotgunUnlocked = startLevelIndex > LevelCatalog.ShotgunUnlockLevel;
+            heavyUnlocked = startLevelIndex > LevelCatalog.ShotgunUnlockLevel;
         }
         else
         {
@@ -286,8 +281,10 @@ public class GameControllerScript : MonoBehaviour
         CreateGrenadeButton();
         CreateMissionsButton();
         SetActiveSafe(shootButton, false);
-        SetActiveSafe(greetingPrompt, !skipGreeting);
+        // the home screen replaces the template's greeting panel
+        SetActiveSafe(greetingPrompt, false);
         SetActiveSafe(scanPrompt, skipGreeting);
+        AddTriggerHold();
         SetActiveSafe(youLostPrompt, false);
         SetActiveSafe(youWonPrompt, false);
         SetActiveSafe(gun, false);
@@ -304,11 +301,15 @@ public class GameControllerScript : MonoBehaviour
             if (ammoCountText != null) ammoCountText.text = string.Empty;
         }
         // realistic look: room lighting, floor shadows and the horror grade
+        // real floor height and depth occlusion first, so everything placed on the floor uses it
+        ARWorld.Attach(mainCamera);
         ARLighting.Attach(mainCamera, ZombieController.CameraHeightAboveFloor);
         PostFX.Create(mainCamera);
+        UnifyFonts();
         StyleSceneButtons();
         CreatePauseButton();
         CreateHomeButton();
+        if (!skipGreeting) ShowHomeScreen();
 
         RefreshXP();
         RefreshHud();
@@ -337,14 +338,20 @@ public class GameControllerScript : MonoBehaviour
 
         if (combo > 0 && Time.time - lastKillTime > ComboWindow) combo = 0;
 
-        // the missions button lives on the menu screens, never mid-fight
-        bool onMenu = State == GameState.Intro || State == GameState.Scanning || State == GameState.Lost || State == GameState.Won;
-        SetActiveSafe(missionsButton, onMenu && !missionBoardOpen);
+        // automatic guns keep firing while the trigger is held
+        if (triggerHeld && State == GameState.Playing && ActiveWeapon.automatic && !PauseMenu.IsOpen) ShootBullet();
+
+        // the HUD belongs to fights; the home and scan screens stay clean
+        if (hud != null) hud.SetVisible(State != GameState.Intro && State != GameState.Scanning);
+
+        // the home screen has its own missions button; this one is for the end-of-run screens
+        bool runOver = State == GameState.Lost || State == GameState.Won;
+        SetActiveSafe(missionsButton, runOver && !missionBoardOpen);
 
         // pause during fights, home once the run is over
         bool inFight = State == GameState.Playing || State == GameState.LevelIntro;
         SetActiveSafe(pauseButton, inFight && !PauseMenu.IsOpen);
-        SetActiveSafe(homeButton, (State == GameState.Lost || State == GameState.Won) && !missionBoardOpen);
+        SetActiveSafe(homeButton, (State == GameState.Lost || State == GameState.Won || State == GameState.Scanning) && !missionBoardOpen);
         if (inFight && !PauseMenu.IsOpen && !missionBoardOpen && PauseMenu.ClosedFrame != Time.frameCount
             && PauseMenu.BackPressed()) OpenPauseMenu();
 
@@ -361,6 +368,8 @@ public class GameControllerScript : MonoBehaviour
         level = LevelCatalog.Get(index);
         State = GameState.LevelIntro;
         SetPlanesVisible(false);
+        // the HUD is hidden on the scan screen; it has to be live before the level banner starts
+        if (hud != null) hud.SetVisible(true);
 
         if (!isRetry && level.bonusAmmo > 0 && index != startLevelIndex)
         {
@@ -368,16 +377,19 @@ public class GameControllerScript : MonoBehaviour
         }
 
         bool newWeapon = false;
-        if (!shotgunUnlocked && index >= LevelCatalog.ShotgunUnlockLevel)
+        if (!heavyUnlocked && index >= LevelCatalog.ShotgunUnlockLevel)
         {
-            shotgunUnlocked = true;
-            ShellCount += startingShells;
+            heavyUnlocked = true;
+            ShellCount += StartingAmmo(heavy);
             newWeapon = true;
         }
-        SetActiveSafe(swapButton, shotgunUnlocked);
+        SetActiveSafe(swapButton, heavyUnlocked);
         GrenadeCount = Mathf.Max(GrenadeCount, grenadesPerLevel + PlayerProfile.BonusGrenades);
         SetActiveSafe(grenadeButton, true);
         GameProgress.Unlock(index);
+
+        // shop items kick in at the start of a level (not on a retry, so they aren't wasted twice)
+        string itemNote = isRetry ? string.Empty : UseLevelStartItems();
 
         levelStartScore = Score;
         levelStartAmmo = AmmoCount;
@@ -400,7 +412,8 @@ public class GameControllerScript : MonoBehaviour
             hud.ShowBanner("LEVEL " + (index + 1) + ": " + level.title.ToUpper(),
                 "<color=#9A9A9A>" + level.chapter + "</color>\n" + level.story +
                 "\n\n<color=#FFC832>" + ObjectiveDescription() + "</color>" +
-                (newWeapon ? "\n<color=#FF8C32>NEW WEAPON: SHOTGUN  -  tap SWAP</color>" : ""), 3.5f);
+                (newWeapon ? "\n<color=#FF8C32>NEW WEAPON: " + heavy.name.ToUpper() + "  -  tap SWAP</color>" : "") +
+                itemNote, 3.5f);
         }
         GameAudio.Play(GameAudio.Impact, 0.9f);
         if (newWeapon) GameAudio.Play(GameAudio.PowerUp, 0.7f, 0.8f);
@@ -496,6 +509,9 @@ public class GameControllerScript : MonoBehaviour
 
     IEnumerator LevelCompleteSequence()
     {
+        // the final kill plays out in slow motion
+        PlayTimeEffect(0.3f, 1.3f);
+
         // whatever is still standing collapses with the level
         foreach (ZombieController zombie in aliveZombies.ToArray())
         {
@@ -583,6 +599,9 @@ public class GameControllerScript : MonoBehaviour
     void Lose()
     {
         State = GameState.Lost;
+        triggerHeld = false;
+        if (timeRoutine != null) StopCoroutine(timeRoutine);
+        Time.timeScale = 1f;
         bool newHighScore = GameProgress.SubmitHighScore(Score);
         SetActiveSafe(shootButton, false);
         SetActiveSafe(swapButton, false);
@@ -629,9 +648,11 @@ public class GameControllerScript : MonoBehaviour
         }
         spawnedPickups.Clear();
 
+        Time.timeScale = 1f;
+        triggerHeld = false;
         Score = levelStartScore;
-        AmmoCount = Mathf.Max(levelStartAmmo, 15);
-        ShellCount = shotgunUnlocked ? Mathf.Max(levelStartShells, 4) : 0;
+        AmmoCount = Mathf.Max(levelStartAmmo, StartingAmmo(sidearm));
+        ShellCount = heavyUnlocked ? Mathf.Max(levelStartShells, StartingAmmo(heavy) / 2) : 0;
         PlayerHealth = maxPlayerHealth;
         combo = 0;
 
@@ -664,14 +685,45 @@ public class GameControllerScript : MonoBehaviour
     // starting loadout for a fresh run from the given level
     void ResetLoadout(int levelIndex)
     {
+        // the shop may have changed what's equipped since the last run
+        LoadEquippedWeapons();
         Score = 0;
-        AmmoCount = startingAmmo + 5 * Mathf.Max(levelIndex - firstLevel, 0) + PlayerProfile.BonusStartingAmmo;
-        // the shotgun is announced on its unlock level, later starts already have it
-        shotgunUnlocked = levelIndex > LevelCatalog.ShotgunUnlockLevel;
-        ShellCount = shotgunUnlocked ? startingShells : 0;
+        AmmoCount = StartingAmmo(sidearm) + 5 * Mathf.Max(levelIndex - firstLevel, 0) + PlayerProfile.BonusStartingAmmo;
+        // the heavy weapon is announced on its unlock level, later starts already have it
+        heavyUnlocked = levelIndex > LevelCatalog.ShotgunUnlockLevel;
+        ShellCount = heavyUnlocked ? StartingAmmo(heavy) : 0;
         GrenadeCount = 0;
-        CurrentWeapon = WeaponType.Pistol;
+        CurrentSlot = WeaponSlot.Sidearm;
         runKills = shotsFired = shotsHit = 0;
+    }
+
+    void LoadEquippedWeapons()
+    {
+        sidearm = Arsenal.Equipped(WeaponSlot.Sidearm);
+        heavy = Arsenal.Equipped(WeaponSlot.Heavy);
+    }
+
+    static int StartingAmmo(WeaponDefinition weapon)
+    {
+        return Mathf.RoundToInt(weapon.startAmmo * Arsenal.AmmoMultiplier(weapon.id));
+    }
+
+    // consumes shop items that act at the start of a level; returns a line for the level banner
+    string UseLevelStartItems()
+    {
+        string note = string.Empty;
+        if (Inventory.Use(ItemId.GrenadePack))
+        {
+            GrenadeCount = Mathf.Min(GrenadeCount + 2, maxGrenades + 2);
+            note += "\n<color=#9BE36A>Grenade Pack: +2 grenades</color>";
+        }
+        if (Inventory.Use(ItemId.AmmoCache))
+        {
+            AmmoCount *= 2;
+            ShellCount *= 2;
+            note += "\n<color=#9BE36A>Ammo Cache: double ammo</color>";
+        }
+        return note;
     }
 
     // ---------- Spawning ----------
@@ -705,9 +757,16 @@ public class GameControllerScript : MonoBehaviour
 
     ZombieType RollZombieType()
     {
+        // each chance takes its own slice of the roll; whatever's left is a walker
         float roll = Random.value;
-        if (roll < level.bruteChance) return ZombieType.Brute;
-        if (roll < level.bruteChance + level.runnerChance) return ZombieType.Runner;
+        float threshold = level.bruteChance;
+        if (roll < threshold) return ZombieType.Brute;
+        threshold += level.spitterChance;
+        if (roll < threshold) return ZombieType.Spitter;
+        threshold += level.crawlerChance;
+        if (roll < threshold) return ZombieController.HasMixamoAnimations ? ZombieType.Crawler : ZombieType.Walker;
+        threshold += level.runnerChance;
+        if (roll < threshold) return ZombieType.Runner;
         return ZombieType.Walker;
     }
 
@@ -730,9 +789,13 @@ public class GameControllerScript : MonoBehaviour
         ZombieController zombie = zombieObject.GetComponent<ZombieController>();
         if (zombie == null) return null;
 
-        GameObject model = null;
-        if (type == ZombieType.Runner) model = runnerModel;
-        else if (type == ZombieType.Brute || type == ZombieType.Boss) model = bruteModel;
+        // the realistic Mixamo characters when present, otherwise the original pack's variants
+        GameObject model = ZombieController.RealisticModelFor(type);
+        if (model == null)
+        {
+            if (type == ZombieType.Runner) model = runnerModel;
+            else if (type == ZombieType.Brute || type == ZombieType.Boss) model = bruteModel;
+        }
         zombie.Configure(type, level.speedMultiplier, model, LevelCatalog.IsFinalBoss(currentLevelIndex));
 
         aliveZombies.Add(zombie);
@@ -839,9 +902,12 @@ public class GameControllerScript : MonoBehaviour
         if (zombie.Type == ZombieType.Runner) MissionSystem.Report(MissionType.KillRunners);
         if (zombie.Type == ZombieType.Brute || zombie.IsBoss) MissionSystem.Report(MissionType.KillBrutes);
         if (damageSource == DamageSource.Grenade) MissionSystem.Report(MissionType.GrenadeKills);
-        if (damageSource == DamageSource.Shotgun) MissionSystem.Report(MissionType.ShotgunKills);
+        if (damageSource == DamageSource.Gun && ActiveWeapon.id == WeaponId.Shotgun) MissionSystem.Report(MissionType.ShotgunKills);
         MissionSystem.ReportBest(MissionType.ReachCombo, combo);
         AwardXP(zombie.ScoreValue / 10);
+
+        // a hair of hit-stop sells every kill
+        PlayTimeEffect(0.05f, zombie.IsBoss ? 0.25f : 0.05f);
 
         float dropChance = zombie.Type == ZombieType.Brute ? bruteDropChance : powerUpDropChance;
         if (!zombie.IsBoss && Random.value < dropChance)
@@ -887,7 +953,7 @@ public class GameControllerScript : MonoBehaviour
         forward = Quaternion.Euler(0f, Random.Range(-50f, 50f), 0f) * forward.normalized;
 
         Vector3 position = mainCamera.transform.position + forward * Random.Range(1.5f, 2.5f);
-        position.y = mainCamera.transform.position.y - ZombieController.CameraHeightAboveFloor;
+        position.y = ARWorld.FloorY;
 
         GameObject pickup = Instantiate(prefab, position, Quaternion.LookRotation(-forward));
         TimedObjectDestructor destructor = pickup.AddComponent<TimedObjectDestructor>();
@@ -913,17 +979,20 @@ public class GameControllerScript : MonoBehaviour
         nextReserveRoundTime = Time.time + reserveAmmoInterval;
     }
 
+    // amount comes from the crate prefab; each gun refills by its own crate size instead
     public void AddAmmo(int amount)
     {
-        AmmoCount += amount;
+        int rounds = Mathf.RoundToInt(sidearm.ammoPerCrate * Arsenal.AmmoMultiplier(sidearm.id));
+        AmmoCount += rounds;
         GameAudio.Play(GameAudio.Pickup, 0.7f);
         MissionSystem.Report(MissionType.CollectPickups);
 
-        string message = "+" + amount + " ammo";
-        if (shotgunUnlocked)
+        string message = "+" + rounds + " ammo";
+        if (heavyUnlocked)
         {
-            ShellCount += shellsPerCrate;
-            message += "  +" + shellsPerCrate + " shells";
+            int heavyRounds = Mathf.RoundToInt(heavy.ammoPerCrate * Arsenal.AmmoMultiplier(heavy.id));
+            ShellCount += heavyRounds;
+            message += "  +" + heavyRounds + " " + heavy.ammoName.ToLower();
         }
         if (GrenadeCount < maxGrenades)
         {
@@ -978,7 +1047,7 @@ public class GameControllerScript : MonoBehaviour
     Vector3 FloorUnderPlayer()
     {
         Vector3 position = mainCamera.transform.position;
-        position.y -= ZombieController.CameraHeightAboveFloor;
+        position.y = ARWorld.FloorY;
         return position;
     }
 
@@ -989,134 +1058,104 @@ public class GameControllerScript : MonoBehaviour
         if (State != GameState.Playing || mainCamera == null) return;
         if (Time.time < nextFireTime) return;
 
+        WeaponDefinition weapon = ActiveWeapon;
+        bool heavyShot = HoldingHeavy;
         bool rapidFire = Time.time < rapidFireUntil;
-        bool shotgun = CurrentWeapon == WeaponType.Shotgun;
-        float cooldown = shotgun ? shotgunCooldown : fireCooldown;
-        nextFireTime = Time.time + (rapidFire ? (shotgun ? shotgunCooldown * 0.5f : rapidFireCooldown) : cooldown);
+        float interval = weapon.fireInterval * Arsenal.FireIntervalMultiplier(weapon.id);
+        nextFireTime = Time.time + (rapidFire ? interval * 0.5f : interval);
 
         Transform cameraTransform = mainCamera.transform;
         Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
 
-        if ((shotgun ? ShellCount : AmmoCount) <= 0 && !rapidFire)
+        if ((heavyShot ? ShellCount : AmmoCount) <= 0 && !rapidFire)
         {
-            if (shotgun)
+            if (heavyShot)
             {
-                SwapToPistol("Out of shells! Pistol ready");
+                SwapToSidearm("Out of " + weapon.ammoName.ToLower() + "! " + sidearm.name + " ready");
                 return;
             }
             // dry fire can still grab a pickup, otherwise the player could soft-lock with no ammo
-            if (CastShot(ray, maxShotDistance, out RaycastHit pickupHit))
+            if (CastShot(ray, weapon.range, out RaycastHit pickupHit))
             {
                 TryCollectPickup(pickupHit.collider);
             }
             GameAudio.Play(GameAudio.DryFire, 0.8f);
             ShowMessage("Out of ammo! Reserve rounds incoming");
+            triggerHeld = false;
             return;
         }
 
         // rapid fire rounds are free
         if (!rapidFire)
         {
-            if (shotgun) ShellCount--;
+            if (heavyShot) ShellCount--;
             else AmmoCount--;
         }
 
         if (gunAudioSource != null && gunAudioSource.clip != null)
         {
-            // the clip is a shotgun blast, pitched up and quieter for the pistol
-            float pitch = shotgun ? Random.Range(0.85f, 0.95f) : Random.Range(1.2f, 1.3f);
-            gunAudioSource.pitch = pitch * (rapidFire ? 1.1f : 1f);
-            gunAudioSource.PlayOneShot(gunAudioSource.clip, shotgun ? 1f : 0.7f);
+            // one gunshot clip, pitched and levelled per gun
+            gunAudioSource.pitch = weapon.soundPitch * Random.Range(0.95f, 1.05f) * (rapidFire ? 1.1f : 1f);
+            gunAudioSource.PlayOneShot(gunAudioSource.clip, weapon.soundVolume);
         }
         if (gunTransform != null)
         {
-            gunTransform.localRotation = gunRestRotation * Quaternion.Euler(-(shotgun ? shotgunRecoilAngle : gunRecoilAngle), 0f, 0f);
+            gunTransform.localRotation = gunRestRotation * Quaternion.Euler(-weapon.recoilAngle, 0f, 0f);
         }
 
+        bool big = weapon.pellets > 1 || weapon.damage >= 100f;
         Vector3 muzzle = gunTransform != null
             ? gunTransform.position + cameraTransform.forward * 0.25f
             : cameraTransform.position + cameraTransform.forward * 0.4f;
-        GameFX.MuzzleFlash(muzzle, cameraTransform.forward, shotgun);
-        GameFX.FlashLight(muzzle, new Color(1f, 0.75f, 0.4f), shotgun ? 5f : 3f, shotgun ? 4f : 3f, 0.06f);
+        GameFX.MuzzleFlash(muzzle, cameraTransform.forward, big);
+        GameFX.FlashLight(muzzle, new Color(1f, 0.75f, 0.4f), big ? 5f : 3f, big ? 4f : 3f, 0.06f);
         GameFX.ShellCasing(muzzle - cameraTransform.forward * 0.15f + cameraTransform.right * 0.03f,
-            cameraTransform.right, cameraTransform.up, shotgun);
+            cameraTransform.right, cameraTransform.up, weapon.id == WeaponId.Shotgun);
 
-        bool hitZombie;
-        if (shotgun)
-        {
-            hitZombie = FireShotgun(cameraTransform, ray);
-            if (hud != null) hud.Shake(5f);
-        }
-        else
-        {
-            hitZombie = FirePistol(cameraTransform, ray);
-        }
+        bool hitZombie = FireWeapon(weapon, cameraTransform, ray);
+        if (weapon.shake > 0f && hud != null) hud.Shake(weapon.shake);
 
         shotsFired++;
         if (hitZombie) shotsHit++;
 
-        // don't leave the player holding an empty shotgun
-        if (shotgun && !rapidFire && ShellCount <= 0) SwapToPistol("Out of shells! Pistol ready");
+        // don't leave the player holding an empty heavy weapon
+        if (heavyShot && !rapidFire && ShellCount <= 0) SwapToSidearm("Out of " + weapon.ammoName.ToLower() + "! " + sidearm.name + " ready");
     }
 
-    void SwapToPistol(string message)
+    void SwapToSidearm(string message)
     {
-        CurrentWeapon = WeaponType.Pistol;
+        CurrentSlot = WeaponSlot.Sidearm;
         nextFireTime = Mathf.Max(nextFireTime, Time.time + 0.25f);
         GameAudio.Play(GameAudio.DryFire, 0.9f, 1.2f);
-        if (hud != null) hud.SetCrosshairWide(false);
+        RefreshCrosshair();
         ShowMessage(message, 1.5f, new Color(1f, 0.6f, 0.1f));
     }
 
-    // hitscan so fast bullets can't tunnel through zombies; the bullet prefab is only a tracer
-    bool FirePistol(Transform cameraTransform, Ray ray)
-    {
-        bool hitZombie = false;
-        Vector3 endPoint = ray.GetPoint(maxShotDistance);
-        if (CastShot(ray, maxShotDistance, out RaycastHit hit))
-        {
-            endPoint = hit.point;
-            ZombieController zombie = hit.collider.GetComponentInParent<ZombieController>();
-            if (zombie != null)
-            {
-                bool headshot = zombie.IsHeadshot(hit.point);
-                float damage = bulletDamage * (headshot ? headshotMultiplier : 1f) * DamageBoost();
-                ApplyHit(zombie, damage, hit.point, ray.direction, headshot);
-                hitZombie = true;
-            }
-            else
-            {
-                TryCollectPickup(hit.collider);
-            }
-        }
-
-        SpawnTracer(cameraTransform, endPoint);
-        return hitZombie;
-    }
-
-    // a cone of pellets; damage on each zombie is added up and applied once
-    bool FireShotgun(Transform cameraTransform, Ray ray)
+    // hitscan so fast bullets can't tunnel through zombies; the bullet prefab is only a tracer.
+    // Every gun is a cone of pellets (one pellet for most); damage per zombie is added up and applied once.
+    bool FireWeapon(WeaponDefinition weapon, Transform cameraTransform, Ray ray)
     {
         Dictionary<ZombieController, float> damageByZombie = new Dictionary<ZombieController, float>();
         Dictionary<ZombieController, Vector3> hitPoints = new Dictionary<ZombieController, Vector3>();
         HashSet<ZombieController> headshots = new HashSet<ZombieController>();
-        float spread = Mathf.Tan(shotgunSpreadAngle * Mathf.Deg2Rad);
+        float spread = Mathf.Tan(weapon.spreadAngle * Mathf.Deg2Rad);
+        float damagePerPellet = weapon.damage * Arsenal.DamageMultiplier(weapon.id) * DamageBoost();
 
-        for (int i = 0; i < shotgunPellets; i++)
+        for (int i = 0; i < weapon.pellets; i++)
         {
-            Vector3 direction = (ray.direction + Random.insideUnitSphere * spread).normalized;
+            Vector3 direction = spread > 0f ? (ray.direction + Random.insideUnitSphere * spread).normalized : ray.direction;
             Ray pellet = new Ray(ray.origin, direction);
-            Vector3 endPoint = pellet.GetPoint(shotgunRange);
+            Vector3 endPoint = pellet.GetPoint(weapon.range);
 
-            if (CastShot(pellet, shotgunRange, out RaycastHit hit))
+            if (CastShot(pellet, weapon.range, out RaycastHit hit))
             {
                 endPoint = hit.point;
                 ZombieController zombie = hit.collider.GetComponentInParent<ZombieController>();
                 if (zombie != null && !zombie.IsDead)
                 {
                     bool headshot = zombie.IsHeadshot(hit.point);
-                    float falloff = Mathf.Lerp(1f, 0.4f, Mathf.InverseLerp(shotgunFalloffStart, shotgunRange, hit.distance));
-                    float damage = shotgunPelletDamage * falloff * (headshot ? headshotMultiplier : 1f) * DamageBoost();
+                    float falloff = Mathf.Lerp(1f, 0.4f, Mathf.InverseLerp(weapon.falloffStart, weapon.range, hit.distance));
+                    float damage = damagePerPellet * falloff * (headshot ? weapon.headshotMultiplier : 1f);
 
                     damageByZombie.TryGetValue(zombie, out float total);
                     damageByZombie[zombie] = total + damage;
@@ -1125,12 +1164,22 @@ public class GameControllerScript : MonoBehaviour
                 }
                 else if (zombie == null)
                 {
-                    TryCollectPickup(hit.collider);
+                    AcidGlob glob = hit.collider.GetComponent<AcidGlob>();
+                    if (glob != null)
+                    {
+                        glob.Pop();
+                        AddScore(50);
+                        ShowMessage("ACID SHOT DOWN!", 1f, new Color(0.55f, 1f, 0.2f));
+                    }
+                    else
+                    {
+                        TryCollectPickup(hit.collider);
+                    }
                 }
             }
 
-            // a few tracers sell the spread without spawning one per pellet
-            if (i % 3 == 0) SpawnTracer(cameraTransform, endPoint);
+            // a few tracers sell a spread without spawning one per pellet
+            if (weapon.pellets == 1 || i % 3 == 0) SpawnTracer(cameraTransform, endPoint);
         }
 
         foreach (KeyValuePair<ZombieController, float> entry in damageByZombie)
@@ -1148,7 +1197,7 @@ public class GameControllerScript : MonoBehaviour
 
     void ApplyHit(ZombieController zombie, float damage, Vector3 point, Vector3 direction, bool headshot)
     {
-        damageSource = CurrentWeapon == WeaponType.Shotgun ? DamageSource.Shotgun : DamageSource.Pistol;
+        damageSource = DamageSource.Gun;
         zombie.AddWound(point, direction);
         bool killed = zombie.TakeDamage(damage, direction);
         damageSource = DamageSource.Other;
@@ -1159,6 +1208,19 @@ public class GameControllerScript : MonoBehaviour
         }
 
         GameFX.Blood(point, -direction + Vector3.up * 0.3f, headshot);
+        // splashes reach the floor under the zombie
+        if (Random.value < 0.5f)
+        {
+            Vector2 offset = Random.insideUnitCircle * 0.3f;
+            GameFX.BloodPool(zombie.transform.position + new Vector3(offset.x, 0f, offset.y), 0.35f);
+        }
+        if (killed && headshot)
+        {
+            zombie.Decapitate();
+            if (hud != null) hud.Shake(6f);
+            if (PostFX.Instance != null) PostFX.Instance.Jolt(0.35f);
+            PlayTimeEffect(0.05f, 0.09f);
+        }
         GameAudio.Play(killed ? GameAudio.KillMarker : GameAudio.HitMarker, 0.5f);
         if (hud != null)
         {
@@ -1175,18 +1237,57 @@ public class GameControllerScript : MonoBehaviour
 
     public void SwitchWeapon()
     {
-        if (!shotgunUnlocked) return;
+        if (!heavyUnlocked) return;
         if (State != GameState.Playing && State != GameState.LevelIntro) return;
 
-        CurrentWeapon = CurrentWeapon == WeaponType.Pistol ? WeaponType.Shotgun : WeaponType.Pistol;
-        bool shotgun = CurrentWeapon == WeaponType.Shotgun;
+        CurrentSlot = HoldingHeavy ? WeaponSlot.Sidearm : WeaponSlot.Heavy;
         nextFireTime = Time.time + 0.25f;
 
-        // a heavy clack for the pump, a light click for the pistol
-        GameAudio.Play(GameAudio.DryFire, 0.9f, shotgun ? 0.6f : 1.2f);
-        if (hud != null) hud.SetCrosshairWide(shotgun);
+        // a heavy clack for the big gun, a light click for the sidearm
+        GameAudio.Play(GameAudio.DryFire, 0.9f, HoldingHeavy ? 0.6f : 1.2f);
+        RefreshCrosshair();
         if (gunTransform != null) gunTransform.localRotation = gunRestRotation * Quaternion.Euler(25f, 0f, 0f);
-        ShowMessage(shotgun ? "SHOTGUN" : "PISTOL", 1f);
+        ShowMessage(ActiveWeapon.name.ToUpper(), 1f);
+    }
+
+    // a wide ring for guns that spray
+    void RefreshCrosshair()
+    {
+        if (hud != null) hud.SetCrosshairWide(ActiveWeapon.pellets > 1 || ActiveWeapon.spreadAngle >= 2f);
+    }
+
+    // hold-to-fire for automatic guns: the FIRE button reports press and release
+    void AddTriggerHold()
+    {
+        if (shootButton == null) return;
+        UnityEngine.EventSystems.EventTrigger trigger = shootButton.GetComponent<UnityEngine.EventSystems.EventTrigger>();
+        if (trigger == null) trigger = shootButton.AddComponent<UnityEngine.EventSystems.EventTrigger>();
+        AddTrigger(trigger, UnityEngine.EventSystems.EventTriggerType.PointerDown, () => triggerHeld = true);
+        AddTrigger(trigger, UnityEngine.EventSystems.EventTriggerType.PointerUp, () => triggerHeld = false);
+        AddTrigger(trigger, UnityEngine.EventSystems.EventTriggerType.PointerExit, () => triggerHeld = false);
+    }
+
+    static void AddTrigger(UnityEngine.EventSystems.EventTrigger trigger, UnityEngine.EventSystems.EventTriggerType type, System.Action action)
+    {
+        UnityEngine.EventSystems.EventTrigger.Entry entry = new UnityEngine.EventSystems.EventTrigger.Entry { eventID = type };
+        entry.callback.AddListener(_ => action());
+        trigger.triggers.Add(entry);
+    }
+
+    // hit-stop and slow motion; never fights the pause menu for the time scale
+    void PlayTimeEffect(float timeScale, float realSeconds)
+    {
+        if (PauseMenu.IsOpen) return;
+        if (timeRoutine != null) StopCoroutine(timeRoutine);
+        timeRoutine = StartCoroutine(TimeEffect(timeScale, realSeconds));
+    }
+
+    IEnumerator TimeEffect(float timeScale, float realSeconds)
+    {
+        Time.timeScale = timeScale;
+        yield return new WaitForSecondsRealtime(realSeconds);
+        if (!PauseMenu.IsOpen) Time.timeScale = 1f;
+        timeRoutine = null;
     }
 
     public void ThrowGrenade()
@@ -1285,7 +1386,7 @@ public class GameControllerScript : MonoBehaviour
         if (State == GameState.Playing && mainCamera != null)
         {
             Ray ray = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
-            float range = CurrentWeapon == WeaponType.Shotgun ? shotgunRange : maxShotDistance;
+            float range = ActiveWeapon.range;
             if (CastShot(ray, range, out RaycastHit hit))
             {
                 ZombieController zombie = hit.collider.GetComponentInParent<ZombieController>();
@@ -1363,17 +1464,64 @@ public class GameControllerScript : MonoBehaviour
 
         PlayerHealth = Mathf.Max(PlayerHealth - amount, 0f);
         if (hud != null) hud.FlashDamage(0.45f);
-        if (PostFX.Instance != null) PostFX.Instance.Jolt(0.2f);
+
+        // claws land in bursts: blood hits the screen and the view jolts, at most every half second
+        if (Time.time >= nextScreenBloodTime)
+        {
+            nextScreenBloodTime = Time.time + 0.9f;
+            if (hud != null) hud.ScreenBlood(1);
+            if (PostFX.Instance != null) PostFX.Instance.Jolt(0.3f);
+        }
 
 #if UNITY_ANDROID || UNITY_IOS
-        if (Time.time >= nextHapticTime)
+        if (GameSettings.Vibration && Time.time >= nextHapticTime)
         {
             Handheld.Vibrate();
             nextHapticTime = Time.time + 1f;
         }
 #endif
 
-        if (PlayerHealth <= 0f) Lose();
+        if (PlayerHealth <= 0f)
+        {
+            // an Adrenaline Shot from the shop cheats death once
+            if (Inventory.Use(ItemId.Adrenaline))
+            {
+                PlayerHealth = maxPlayerHealth * 0.5f;
+                // the blast shoves nearby zombies back so the revive isn't wasted
+                ActivatePowerUp(PowerUpType.Shockwave);
+                ShowMessage("ADRENALINE!\n<size=70%>Back on your feet</size>", 2f, UIStyle.Toxic);
+                return;
+            }
+            Lose();
+        }
+    }
+
+    // a constant low drone and wind under the music; horror lives in the quiet moments
+    void StartAmbience()
+    {
+        AudioSource ambience = gameObject.AddComponent<AudioSource>();
+        ambience.clip = GameAudio.Ambience;
+        ambience.loop = true;
+        ambience.spatialBlend = 0f;
+        ambience.volume = 0.35f;
+        ambience.Play();
+    }
+
+    // a spitter's glob reached the player
+    public void AcidHit(float damage)
+    {
+        if (State != GameState.Playing) return;
+        if (hud != null) hud.ScreenSplatter(3, new Color(0.35f, 0.8f, 0.1f, 0.8f));
+        ShowMessage("ACID!", 1f, new Color(0.55f, 1f, 0.2f));
+        DamagePlayer(damage);
+    }
+
+    // the player stepped out of the way in time
+    public void AcidDodged()
+    {
+        if (State != GameState.Playing) return;
+        AddScore(25);
+        ShowMessage("DODGED!", 0.8f, new Color(0.55f, 1f, 0.2f));
     }
 
     // heartbeat, red vignette and music that react to danger
@@ -1459,8 +1607,75 @@ public class GameControllerScript : MonoBehaviour
     {
         SetActiveSafe(gun, true);
         SetActiveSafe(shootButton, true);
-        if (hud != null) hud.SetCrosshairWide(CurrentWeapon == WeaponType.Shotgun);
+        RefreshCrosshair();
         StartCoroutine(BeginLevel(index, false));
+    }
+
+    // ---------- Home screen ----------
+
+    void ShowHomeScreen()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        if (canvas == null) return;
+
+        State = GameState.Intro;
+        SetActiveSafe(scanPrompt, false);
+        // the floor grid belongs to the scan step, not the menu
+        SetPlanesVisible(false);
+        if (homeScreen == null)
+        {
+            homeScreen = HomeScreen.Show(canvas.rootCanvas, playerHealthText,
+                () => ChooseLevel(GameProgress.UnlockedLevel), ShowLevelPicker, OpenMissionBoard, OpenShop);
+        }
+        homeScreen.SetVisible(true);
+    }
+
+    void ShowLevelPicker()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        if (canvas == null) return;
+        LevelSelectMenu.Show(canvas.rootCanvas, playerHealthText, ChooseLevel);
+    }
+
+    void OpenShop()
+    {
+        Canvas canvas = playerHealthText != null ? playerHealthText.canvas : null;
+        if (canvas == null) return;
+        ShopMenu.Show(canvas.rootCanvas, playerHealthText, () =>
+        {
+            LoadEquippedWeapons();
+            if (homeScreen != null) homeScreen.Refresh();
+        });
+    }
+
+    // a level picked from home: scan the room next, then fight
+    void ChooseLevel(int index)
+    {
+        int scene = LevelCatalog.SceneForLevel(index);
+        if (scene != SceneManager.GetActiveScene().buildIndex && scene < SceneManager.sceneCountInBuildSettings)
+        {
+            // that level lives in the other chapter scene, which opens straight on the scan step
+            pendingStartLevel = index;
+            StartCoroutine(LoadSceneWithFade(scene));
+            return;
+        }
+
+        startLevelIndex = index;
+        ResetLoadout(index);
+        levelChosen = true;
+        if (homeScreen != null) homeScreen.SetVisible(false);
+        OnCOntinueButtonClicked();
+    }
+
+    // the scene's fonts didn't survive the Unity 6 upgrade (garbled glyphs); use the HUD's font everywhere
+    void UnifyFonts()
+    {
+        if (playerHealthText == null || playerHealthText.font == null) return;
+        TMP_FontAsset font = playerHealthText.font;
+        foreach (TMP_Text text in playerHealthText.canvas.rootCanvas.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (text.font != font) text.font = font;
+        }
     }
 
     // ---------- Pause and home ----------
@@ -1596,6 +1811,7 @@ public class GameControllerScript : MonoBehaviour
         {
             missionBoardOpen = false;
             RefreshXP();
+            if (homeScreen != null) homeScreen.Refresh();
         });
     }
 
@@ -1683,9 +1899,10 @@ public class GameControllerScript : MonoBehaviour
     void RefreshHud()
     {
         bool rapidFire = Time.time < rapidFireUntil;
-        bool shotgun = CurrentWeapon == WeaponType.Shotgun;
-        int rounds = shotgun ? ShellCount : AmmoCount;
-        int lowThreshold = shotgun ? 2 : lowAmmoThreshold;
+        bool heavyShot = HoldingHeavy;
+        int rounds = heavyShot ? ShellCount : AmmoCount;
+        // "low" scales with how much the gun usually carries
+        int lowThreshold = heavyShot ? Mathf.Max(2, heavy.startAmmo / 4) : lowAmmoThreshold;
         Color roundsColor = rapidFire ? new Color(1f, 0.85f, 0.1f)
             : rounds <= 0 ? new Color(1f, 0.25f, 0.2f)
             : rounds <= lowThreshold ? new Color(1f, 0.6f, 0.1f)
@@ -1695,14 +1912,15 @@ public class GameControllerScript : MonoBehaviour
         if (hud != null)
         {
             hud.SetHealth(PlayerHealth, maxPlayerHealth);
-            hud.SetAmmo(shotgun ? "SHOTGUN  SHELLS" : "PISTOL  AMMO", roundsLabel, roundsColor, GrenadeCount);
+            WeaponDefinition weapon = ActiveWeapon;
+            hud.SetAmmo(weapon.name.ToUpper() + "  " + weapon.ammoName, roundsLabel, roundsColor, GrenadeCount);
         }
         else
         {
             // no HUD: fall back to the scene's plain labels
             if (ammoCountText != null)
             {
-                ammoCountText.text = (shotgun ? "Shells: " : "Ammo: ") + roundsLabel;
+                ammoCountText.text = ActiveWeapon.ammoName + ": " + roundsLabel;
                 ammoCountText.color = roundsColor;
             }
             if (playerHealthText != null)
@@ -1788,6 +2006,8 @@ public class GameControllerScript : MonoBehaviour
 
     IEnumerator LoadSceneWithFade(int buildIndex)
     {
+        // the fade runs on game time, so it must not start frozen or in slow motion
+        Time.timeScale = 1f;
         yield return Fade(0f, 1f);
         SceneManager.LoadScene(buildIndex);
     }

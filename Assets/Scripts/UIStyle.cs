@@ -39,6 +39,7 @@ public static class UIStyle
     public static void StyleButton(Button button, Color accent, string label = null, float fontSize = 0f)
     {
         if (button == null) return;
+        Unstretch((RectTransform)button.transform);
         Image background = button.targetGraphic as Image;
         if (background == null) background = button.GetComponent<Image>();
         if (background != null)
@@ -67,6 +68,12 @@ public static class UIStyle
         rim.type = Image.Type.Sliced;
         rim.color = accent;
 
+        // on a short button the corners would overlap and turn it into an oval; shrink them to fit
+        float height = ((RectTransform)button.transform).rect.height;
+        float cornerScale = height > 1f ? Mathf.Max(1f, (Radius + 2) / (0.45f * height)) : 1f;
+        rim.pixelsPerUnitMultiplier = cornerScale;
+        if (background != null) background.pixelsPerUnitMultiplier = cornerScale;
+
         ColorBlock colors = button.colors;
         colors.normalColor = Color.white;
         colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
@@ -89,6 +96,24 @@ public static class UIStyle
             text.color = Color.white;
             text.fontStyle = FontStyle.Bold;
         }
+    }
+
+    // template buttons are scaled unevenly (e.g. 2x wide), which turns rounded corners into ovals and
+    // stretches the label; fold the scale into the rect's size instead
+    static void Unstretch(RectTransform rect)
+    {
+        Vector3 scale = rect.localScale;
+        if (Mathf.Approximately(scale.x, 1f) && Mathf.Approximately(scale.y, 1f)) return;
+
+        // works for fixed and anchor-stretched rects alike: keep the same on-screen box, at scale 1
+        Vector3 worldCenter = rect.TransformPoint(rect.rect.center);
+        Vector2 size = new Vector2(rect.rect.width * scale.x, rect.rect.height * scale.y);
+        Vector2 anchor = (rect.anchorMin + rect.anchorMax) * 0.5f;
+        rect.anchorMin = rect.anchorMax = anchor;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.localScale = Vector3.one;
+        rect.sizeDelta = size;
+        rect.position = worldCenter;
     }
 
     // a full-width button built from scratch, with a label cloned from a scene text for its font

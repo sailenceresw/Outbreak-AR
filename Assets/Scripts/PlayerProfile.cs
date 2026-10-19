@@ -45,14 +45,45 @@ public static class PlayerProfile
         return level;
     }
 
-    // returns how many levels were gained
+    // returns how many levels were gained; every XP point also earns a Supply Point to spend
     public static int AddXP(int amount)
     {
         if (amount <= 0) return 0;
         int before = Level;
+        PlayerPrefs.SetInt(SupplyKey, SupplyPoints + amount);
         PlayerPrefs.SetInt(XPKey, TotalXP + amount);
         PlayerPrefs.Save();
         return Level - before;
+    }
+
+    // ---------- Supply Points (shop currency) ----------
+
+    const string SupplyKey = "Profile_Supply";
+
+    public static int SupplyPoints
+    {
+        get
+        {
+            // players from before the shop start with the XP they had already earned
+            if (!PlayerPrefs.HasKey(SupplyKey)) PlayerPrefs.SetInt(SupplyKey, TotalXP);
+            return PlayerPrefs.GetInt(SupplyKey, 0);
+        }
+    }
+
+    public static void AddSupply(int amount)
+    {
+        if (amount <= 0) return;
+        PlayerPrefs.SetInt(SupplyKey, SupplyPoints + amount);
+        PlayerPrefs.Save();
+    }
+
+    // returns false (and spends nothing) when there aren't enough points
+    public static bool Spend(int amount)
+    {
+        if (amount < 0 || SupplyPoints < amount) return false;
+        PlayerPrefs.SetInt(SupplyKey, SupplyPoints - amount);
+        PlayerPrefs.Save();
+        return true;
     }
 
     // ---------- Level rewards ----------

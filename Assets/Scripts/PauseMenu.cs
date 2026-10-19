@@ -12,7 +12,6 @@ public class PauseMenu : MonoBehaviour
     public static int ClosedFrame { get; private set; } = -1;
 
     Action onResume;
-    float previousTimeScale = 1f;
 
     public static PauseMenu Show(Canvas canvas, TMP_Text template, string levelName,
         Action onResume, Action onRestart, Action onMissions, Action onHome)
@@ -32,7 +31,6 @@ public class PauseMenu : MonoBehaviour
 
         PauseMenu menu = panel.AddComponent<PauseMenu>();
         menu.onResume = onResume;
-        menu.previousTimeScale = Time.timeScale;
         Time.timeScale = 0f;
         AudioListener.pause = true;
         IsOpen = true;
@@ -78,7 +76,8 @@ public class PauseMenu : MonoBehaviour
 
     void Close(Action then)
     {
-        Time.timeScale = previousTimeScale > 0f ? previousTimeScale : 1f;
+        // always back to full speed: a hit-stop or slow-mo caught by the pause must not stick
+        Time.timeScale = 1f;
         AudioListener.pause = false;
         IsOpen = false;
         ClosedFrame = Time.frameCount;

@@ -11,6 +11,7 @@ public static class GameAudio
     static readonly System.Random noiseRandom = new System.Random(1234);
 
     static AudioClip heartbeat, hitMarker, killMarker, dryFire, pickup, powerUp, siren, fanfare, impact, explosion, throwWhoosh;
+    static AudioClip footstep, ambience, spit, acidSplash;
 
     public static AudioClip Heartbeat => heartbeat != null ? heartbeat : heartbeat = Build("Heartbeat", 0.55f, t =>
         Thump(t) + 0.7f * Thump(t - 0.2f));
@@ -61,6 +62,59 @@ public static class GameAudio
     public static AudioClip Throw => throwWhoosh != null ? throwWhoosh : throwWhoosh = Build("Throw", 0.45f, t =>
         Mathf.Sin(TwoPi * 2400f * t) * Mathf.Exp(-t * 160f) * 0.6f
         + Noise() * Mathf.Sin(Mathf.PI * Mathf.Clamp01((t - 0.05f) / 0.4f)) * 0.5f);
+
+    // a dragging, scuffed step on a hard floor
+    public static AudioClip Footstep => footstep != null ? footstep : footstep = Build("Footstep", 0.22f, t =>
+        Mathf.Sin(TwoPi * 70f * t) * Mathf.Exp(-t * 35f) * 0.8f
+        + Noise() * Mathf.Exp(-t * 22f) * 0.6f * Mathf.Clamp01(t * 60f));
+
+    // eight-second loop: low drone, wind and a distant metallic moan, quiet enough to sit under the music
+    public static AudioClip Ambience => ambience != null ? ambience : ambience = Build("Ambience", 8f, t =>
+    {
+        float drone = Mathf.Sin(TwoPi * 41f * t) * 0.5f + Mathf.Sin(TwoPi * 61.5f * t + Mathf.Sin(TwoPi * 0.25f * t)) * 0.3f;
+        float wind = Noise() * (0.25f + 0.2f * Mathf.Sin(TwoPi * 0.125f * t));
+        float moanEnvelope = Mathf.Max(0f, Mathf.Sin(Mathf.PI * Mathf.Clamp01((t - 4.5f) / 2.5f)));
+        float moan = Mathf.Sin(TwoPi * (220f - 30f * (t - 4.5f)) * t) * moanEnvelope * 0.25f;
+        // fade the ends so the loop has no click
+        float edge = Mathf.Clamp01(t * 4f) * Mathf.Clamp01((8f - t) * 4f);
+        return (drone + wind * 0.6f + moan) * edge;
+    });
+
+    // wet hawk and spit
+    public static AudioClip Spit => spit != null ? spit : spit = Build("Spit", 0.35f, t =>
+        Noise() * Mathf.Exp(-t * 14f) * (0.6f + 0.4f * Mathf.Sin(TwoPi * 30f * t))
+        + Mathf.Sin(TwoPi * (300f - 400f * t) * t) * Mathf.Exp(-t * 10f) * 0.5f);
+
+    // acid sizzle on impact
+    public static AudioClip AcidSplash => acidSplash != null ? acidSplash : acidSplash = Build("AcidSplash", 0.7f, t =>
+        Noise() * Mathf.Exp(-t * 5f) * (0.5f + 0.5f * Mathf.Abs(Mathf.Sin(TwoPi * 90f * t)))
+        + Mathf.Sin(TwoPi * 180f * t) * Mathf.Exp(-t * 18f) * 0.4f);
+
+    // a positional sound at a point in the world, for things the player should locate by ear
+    public static void PlayAt(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f)
+    {
+        if (clip == null) return;
+        GameObject holder = new GameObject("Sound " + clip.name);
+        holder.transform.position = position;
+        AudioSource source3D = holder.AddComponent<AudioSource>();
+        Make3D(source3D);
+        source3D.clip = clip;
+        source3D.volume = volume;
+        source3D.pitch = pitch;
+        source3D.Play();
+        UnityEngine.Object.Destroy(holder, clip.length / Mathf.Max(pitch, 0.1f) + 0.1f);
+    }
+
+    // full 3D: pans to the side the sound comes from and fades with distance
+    public static void Make3D(AudioSource source3D)
+    {
+        source3D.spatialBlend = 1f;
+        source3D.rolloffMode = AudioRolloffMode.Logarithmic;
+        source3D.minDistance = 1f;
+        source3D.maxDistance = 18f;
+        source3D.dopplerLevel = 0f;
+        source3D.spread = 40f;
+    }
 
     public static void Play(AudioClip clip, float volume = 1f, float pitch = 1f)
     {

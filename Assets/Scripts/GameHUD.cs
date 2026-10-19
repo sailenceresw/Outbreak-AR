@@ -16,6 +16,22 @@ public class GameHUD : MonoBehaviour
     static readonly Color AimOnTarget = new Color(1f, 0.25f, 0.2f, 1f);
     static readonly Color XPBarColor = new Color(0.35f, 0.75f, 1f, 1f);
 
+    const int MaxScreenSplats = 6;
+    const float ScreenSplatLife = 3.2f;
+
+    class ScreenSplat
+    {
+        public RawImage image;
+        public float startTime;
+        public Vector2 start;
+        public Color color;
+    }
+
+    static readonly Color BloodSplat = new Color(0.42f, 0f, 0f, 0.6f);
+
+    readonly List<ScreenSplat> screenSplats = new List<ScreenSplat>();
+    int nextScreenSplat;
+
     class DamageNumber
     {
         public TMP_Text text;
@@ -93,6 +109,14 @@ public class GameHUD : MonoBehaviour
         vignette = NewRawImage("Vignette", GameFX.VignetteTexture);
         Stretch(vignette.rectTransform);
         vignette.color = new Color(0.6f, 0f, 0f, 0f);
+
+        for (int i = 0; i < MaxScreenSplats; i++)
+        {
+            RawImage splat = NewRawImage("ScreenBlood", GameFX.SplatTexture(i));
+            splat.rectTransform.anchorMin = splat.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            splat.gameObject.SetActive(false);
+            screenSplats.Add(new ScreenSplat { image = splat });
+        }
 
         // dark fade behind the top of the HUD so it reads over any camera image
         RawImage shade = NewRawImage("TopShade", GameFX.TopShadeTexture);
@@ -181,7 +205,8 @@ public class GameHUD : MonoBehaviour
         calloutText = NewText(template, "Callout", 34f, TextAlignmentOptions.Center, root);
         calloutText.rectTransform.anchorMin = calloutText.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
         calloutText.rectTransform.sizeDelta = new Vector2(900f, 120f);
-        calloutText.rectTransform.anchoredPosition = new Vector2(0f, 150f);
+        // above the level banner, so a call-out and a banner never sit on top of each other
+        calloutText.rectTransform.anchoredPosition = new Vector2(0f, 330f);
         calloutText.fontStyle = FontStyles.Bold;
 
         for (int i = 0; i < MaxDamageNumbers; i++)
@@ -270,7 +295,12 @@ public class GameHUD : MonoBehaviour
         weaponText.rectTransform.pivot = new Vector2(1f, 1f);
         weaponText.rectTransform.sizeDelta = new Vector2(0f, 22f);
         weaponText.color = new Color(1f, 1f, 1f, 0.7f);
-        weaponText.characterSpacing = 6f;
+        weaponText.characterSpacing = 4f;
+        // long names ("MAGNUM REVOLVER AMMO") stay on one line and shrink rather than wrapping over the count
+        weaponText.textWrappingMode = TextWrappingModes.NoWrap;
+        weaponText.enableAutoSizing = true;
+        weaponText.fontSizeMin = 11f;
+        weaponText.fontSizeMax = 18f;
 
         roundsText = NewText(template, "Rounds", 40f, TextAlignmentOptions.TopRight, panel);
         roundsText.rectTransform.anchorMin = new Vector2(0f, 1f);
@@ -335,7 +365,59 @@ public class GameHUD : MonoBehaviour
         UpdateHealthBar();
         UpdateCallout();
         UpdateDamageNumbers();
+        UpdateScreenBlood();
         xpFill.fillAmount = Mathf.MoveTowards(xpFill.fillAmount, xpTarget, Time.deltaTime * 1.5f);
+    }
+
+    // blood splats near the screen edges that slowly drip down and fade
+    public void ScreenBlood(int count)
+    {
+        ScreenSplatter(count, BloodSplat);
+    }
+
+    // blood, or green for a spitter's acid
+    public void ScreenSplatter(int count, Color color)
+    {
+        Vector2 half = root.rect.size * 0.5f;
+        for (int i = 0; i < count; i++)
+        {
+            ScreenSplat splat = screenSplats[nextScreenSplat];
+            nextScreenSplat = (nextScreenSplat + 1) % screenSplats.Count;
+
+            // keep away from the centre so the crosshair stays clear
+            Vector2 direction = Random.insideUnitCircle.normalized;
+            splat.start = new Vector2(direction.x * half.x * Random.Range(0.55f, 0.95f), direction.y * half.y * Random.Range(0.45f, 0.9f));
+            float size = Random.Range(260f, 520f);
+            splat.image.rectTransform.sizeDelta = new Vector2(size, size);
+            splat.image.rectTransform.localRotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
+            splat.image.rectTransform.anchoredPosition = splat.start;
+            splat.startTime = Time.time;
+            splat.color = color;
+            splat.image.gameObject.SetActive(true);
+        }
+    }
+
+    void UpdateScreenBlood()
+    {
+        foreach (ScreenSplat splat in screenSplats)
+        {
+            if (!splat.image.gameObject.activeSelf) continue;
+            float age = (Time.time - splat.startTime) / ScreenSplatLife;
+            if (age >= 1f)
+            {
+                splat.image.gameObject.SetActive(false);
+                continue;
+            }
+            splat.image.rectTransform.anchoredPosition = splat.start + Vector2.down * (age * 60f);
+            Color color = splat.color;
+            color.a *= age < 0.6f ? 1f : 1f - (age - 0.6f) / 0.4f;
+            splat.image.color = color;
+        }
+    }
+
+    public void SetVisible(bool visible)
+    {
+        if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
     }
 
     public void SetXP(int level, float progress)

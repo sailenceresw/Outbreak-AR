@@ -18,6 +18,10 @@ public class LevelDefinition
     // chance a spawn is a runner / brute instead of a walker
     public float runnerChance;
     public float bruteChance;
+    // acid throwers that hang back; the player dodges by moving
+    public float spitterChance;
+    // fast, low crawlers you have to aim down at
+    public float crawlerChance;
     // periodic bursts of zombies with a siren warning
     public bool hordeEvents;
     public int bonusAmmo;
@@ -40,7 +44,7 @@ public static class LevelCatalog
             chapter = "Chapter 1: Outbreak", title = "They're Fast Now",
             story = "Some of them can run.\nDon't let them flank you.",
             objective = LevelObjective.Eliminate, zombieCount = 10,
-            maxAlive = 4, runnerChance = 0.35f, bonusAmmo = 10,
+            maxAlive = 4, runnerChance = 0.35f, crawlerChance = 0.1f, bonusAmmo = 10,
         },
         new LevelDefinition
         {
@@ -48,7 +52,7 @@ public static class LevelCatalog
             story = "They keep coming.\nSurvive until the rescue signal.",
             objective = LevelObjective.Survive, surviveSeconds = 60f,
             maxAlive = 5, spawnInterval = new Vector2(1.8f, 3f),
-            runnerChance = 0.3f, bruteChance = 0.1f, bonusAmmo = 15,
+            runnerChance = 0.3f, bruteChance = 0.1f, spitterChance = 0.1f, crawlerChance = 0.1f, bonusAmmo = 15,
         },
         new LevelDefinition
         {
@@ -64,7 +68,7 @@ public static class LevelCatalog
             chapter = "Chapter 2: Nightfall", title = "Nightfall",
             story = "The dead are restless after dark.\nListen for the siren.",
             objective = LevelObjective.Eliminate, zombieCount = 14, speedMultiplier = 1.15f,
-            maxAlive = 5, runnerChance = 0.35f, bruteChance = 0.1f, hordeEvents = true, bonusAmmo = 5,
+            maxAlive = 5, runnerChance = 0.35f, bruteChance = 0.1f, spitterChance = 0.12f, crawlerChance = 0.12f, hordeEvents = true, bonusAmmo = 5,
         },
         new LevelDefinition
         {
@@ -72,7 +76,7 @@ public static class LevelCatalog
             story = "They're coming from every side.\nKeep turning. Keep shooting.",
             objective = LevelObjective.Survive, surviveSeconds = 75f, speedMultiplier = 1.2f,
             maxAlive = 7, spawnInterval = new Vector2(1.2f, 2.2f),
-            runnerChance = 0.4f, bruteChance = 0.15f, hordeEvents = true, bonusAmmo = 15,
+            runnerChance = 0.4f, bruteChance = 0.15f, spitterChance = 0.15f, crawlerChance = 0.15f, hordeEvents = true, bonusAmmo = 15,
         },
         new LevelDefinition
         {
@@ -80,14 +84,14 @@ public static class LevelCatalog
             story = "No more running.\nEvery bullet counts.",
             objective = LevelObjective.Eliminate, zombieCount = 18, speedMultiplier = 1.3f,
             maxAlive = 6, spawnInterval = new Vector2(1.2f, 2.5f),
-            runnerChance = 0.4f, bruteChance = 0.2f, hordeEvents = true, bonusAmmo = 15,
+            runnerChance = 0.4f, bruteChance = 0.2f, spitterChance = 0.18f, crawlerChance = 0.15f, hordeEvents = true, bonusAmmo = 15,
         },
         new LevelDefinition
         {
             chapter = "Chapter 2: Nightfall", title = "The Abomination",
             story = "It's the source of the outbreak.\nEnd this. Now.",
             objective = LevelObjective.Boss, zombieCount = 10, speedMultiplier = 1.2f,
-            maxAlive = 5, runnerChance = 0.4f, bruteChance = 0.15f, bonusAmmo = 30,
+            maxAlive = 5, runnerChance = 0.4f, bruteChance = 0.15f, spitterChance = 0.12f, bonusAmmo = 30,
         },
     };
 

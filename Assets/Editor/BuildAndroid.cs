@@ -14,6 +14,10 @@ public static class BuildAndroid
     {
         // keep the zombie materials on the full Lit shader; safe to run every build
         ZombieMaterialUpgrade.Upgrade();
+        // the Mixamo animation set, retargeted onto every zombie model
+        ZombieAnimatorBuilder.Build();
+        // the Mixamo characters' skin textures, wired to editable materials
+        MixamoCharacterSetup.Run();
 
         string[] scenes = EditorBuildSettings.scenes
             .Where(scene => scene.enabled)
