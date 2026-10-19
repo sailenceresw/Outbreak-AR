@@ -40,9 +40,40 @@ public class HomeScreen : MonoBehaviour
         RawImage shade = NewShade(new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(0f, 0f, 0f, 0.55f));
         shade.raycastTarget = true;
 
+        // key art: a horde rendered from the game's zombies, rising behind the menu
+        Sprite hordeArt = Resources.Load<Sprite>("Art/HomeHorde");
+        if (hordeArt != null)
+        {
+            GameObject art = new GameObject("KeyArt", typeof(RectTransform));
+            RectTransform artRect = art.GetComponent<RectTransform>();
+            artRect.SetParent(root, false);
+            Stretch(artRect, new Vector2(-0.08f, 0f), new Vector2(1.08f, 0.7f));
+            Image artImage = art.AddComponent<Image>();
+            artImage.sprite = hordeArt;
+            artImage.preserveAspect = true;
+            artImage.raycastTarget = false;
+            artImage.color = new Color(1f, 1f, 1f, 0.85f);
+        }
+
+        // logo: a faint biohazard emblem behind the title, which glows blood red over a dark outline
+        Sprite emblem = UIStyle.Icon("Outbreak");
+        if (emblem != null)
+        {
+            GameObject mark = new GameObject("Emblem", typeof(RectTransform));
+            RectTransform markRect = mark.GetComponent<RectTransform>();
+            markRect.SetParent(root, false);
+            Stretch(markRect, new Vector2(0.3f, 0.8f), new Vector2(0.7f, 0.97f));
+            Image markImage = mark.AddComponent<Image>();
+            markImage.sprite = emblem;
+            markImage.preserveAspect = true;
+            markImage.raycastTarget = false;
+            markImage.color = new Color(0.75f, 0.1f, 0.08f, 0.22f);
+        }
+
         TMP_Text title = NewText(root, "OUTBREAK", 76f, FontStyles.Bold, new Vector2(0f, 0.84f), new Vector2(1f, 0.93f));
         title.color = UIStyle.Blood;
         title.characterSpacing = 12f;
+        StyleLogo(title);
         TMP_Text subtitle = NewText(root, "A R   Z O M B I E   S U R V I V A L", 20f, FontStyles.Bold, new Vector2(0f, 0.81f), new Vector2(1f, 0.85f));
         subtitle.color = new Color(1f, 1f, 1f, 0.75f);
 
@@ -85,6 +116,21 @@ public class HomeScreen : MonoBehaviour
 
         TMP_Text hint = NewText(root, "Find a clear floor space. Zombies will rise from it.", 18f, FontStyles.Normal, new Vector2(0.05f, 0.07f), new Vector2(0.95f, 0.12f));
         hint.color = new Color(1f, 1f, 1f, 0.55f);
+    }
+
+    // a dark outline and a soft red glow underneath, on this text's own material copy
+    static void StyleLogo(TMP_Text title)
+    {
+        Material material = title.fontMaterial;
+        title.outlineWidth = 0.18f;
+        title.outlineColor = new Color32(10, 0, 0, 255);
+        if (material.HasProperty(ShaderUtilities.ID_UnderlayColor))
+        {
+            material.EnableKeyword(ShaderUtilities.Keyword_Underlay);
+            material.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(1f, 0.05f, 0.02f, 0.75f));
+            material.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.85f);
+            material.SetFloat(ShaderUtilities.ID_UnderlayDilate, 0.4f);
+        }
     }
 
     public void Refresh()

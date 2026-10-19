@@ -90,6 +90,7 @@ public static class WeaponArt
     public static void RenderIcons()
     {
         SetupMaterials();
+        ZombieArt.FullTextures();
         Directory.CreateDirectory(IconFolder);
         foreach (WeaponId id in System.Enum.GetValues(typeof(WeaponId)))
         {

@@ -42,6 +42,7 @@ public static class ZombieArt
     public static void RenderPortraits()
     {
         Directory.CreateDirectory(OutputFolder);
+        FullTextures();
         GameObject[] models = Resources.LoadAll<GameObject>("ZombieModels");
         RuntimeAnimatorController controller = Resources.Load<RuntimeAnimatorController>("ZombieMixamo");
 
@@ -143,6 +144,151 @@ public static class ZombieArt
         Object.DestroyImmediate(fill.gameObject);
         Object.DestroyImmediate(rim.gameObject);
         Object.DestroyImmediate(zombie);
+    }
+
+    // In batch mode there's no baked environment: specular surfaces reflect an uninitialised cubemap and
+    // render as rainbow glitter. Use flat ambient light, no environment reflections, and full-resolution textures.
+    public static void FullTextures()
+    {
+        Texture.streamingTextureForceLoadAll = true;
+        QualitySettings.streamingMipmapsActive = false;
+        QualitySettings.globalTextureMipmapLimit = 0;
+        QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
+        RenderSettings.skybox = null;
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.defaultReflectionMode = UnityEngine.Rendering.DefaultReflectionMode.Custom;
+        RenderSettings.customReflectionTexture = null;
+        RenderSettings.reflectionIntensity = 0f;
+    }
+
+    // every generated picture in one go: gun pictures, dex portraits and the home key art
+    public static void RenderEverything()
+    {
+        FullTextures();
+        WeaponArt.RenderIcons();
+        RenderPortraits();
+        RenderKeyArt();
+    }
+
+    // ---------- Home screen key art ----------
+
+    struct Extra
+    {
+        public string model;
+        public string state;
+        public float time;
+        public Vector3 position;
+        public float turn;
+    }
+
+    // a horde shambling toward the viewer, backlit red; transparent background so it sits over the camera feed
+    [MenuItem("Tools/Outbreak/Render Home Key Art")]
+    public static void RenderKeyArt()
+    {
+        const int width = 720, height = 1100;
+        string output = "Assets/Resources/Art/HomeHorde.png";
+        FullTextures();
+        Directory.CreateDirectory("Assets/Resources/Art");
+        GameObject[] models = Resources.LoadAll<GameObject>("ZombieModels");
+        RuntimeAnimatorController controller = Resources.Load<RuntimeAnimatorController>("ZombieMixamo");
+
+        Extra[] horde =
+        {
+            new Extra { model = "warzombie", state = "Z_Walk_InPlace", time = 0.1f, position = new Vector3(0f, 0f, 0f), turn = 0f },
+            new Extra { model = "girl", state = "Z_Walk_InPlace", time = 0.6f, position = new Vector3(-0.95f, 0f, 1.4f), turn = 12f },
+            new Extra { model = "warzombie", state = "Scream", time = 0.5f, position = new Vector3(1.05f, 0f, 1.7f), turn = -15f },
+            new Extra { model = "girl", state = "Z_Run_InPlace", time = 0.3f, position = new Vector3(0.45f, 0f, 3.6f), turn = -5f },
+            new Extra { model = "warzombie", state = "Z_Walk_InPlace", time = 0.85f, position = new Vector3(-1.7f, 0f, 3.9f), turn = 20f },
+            new Extra { model = "warzombie", state = "Idle", time = 0.2f, position = new Vector3(1.9f, 0f, 4.8f), turn = -25f },
+            new Extra { model = "girl", state = "Z_Walk_InPlace", time = 0.35f, position = new Vector3(-0.4f, 0f, 6f), turn = 8f },
+        };
+
+        Vector3 origin = new Vector3(0f, -500f, 0f);
+        AnimationMode.StartAnimationMode();
+        AnimationMode.BeginSampling();
+        System.Collections.Generic.List<GameObject> spawned = new System.Collections.Generic.List<GameObject>();
+        foreach (Extra extra in horde)
+        {
+            GameObject model = System.Array.Find(models, m => m.name.ToLower().Contains(extra.model));
+            if (model == null) continue;
+            GameObject zombie = Object.Instantiate(model);
+            zombie.transform.position = origin + extra.position;
+            zombie.transform.rotation = Quaternion.Euler(0f, 180f + extra.turn, 0f);
+            foreach (Transform t in zombie.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = Layer;
+            Animator animator = zombie.GetComponentInChildren<Animator>();
+            AnimationClip clip = ClipFor(controller, extra.state);
+            if (animator != null && clip != null)
+            {
+                animator.applyRootMotion = false;
+                AnimationMode.SampleAnimationClip(animator.gameObject, clip, extra.time * clip.length);
+            }
+            zombie.transform.position = origin + extra.position;
+
+            // further back is darker, as if fading into the night
+            float depth = Mathf.InverseLerp(0f, 6f, extra.position.z);
+            Color shade = Color.Lerp(new Color(0.85f, 0.82f, 0.8f), new Color(0.25f, 0.22f, 0.24f), depth);
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            foreach (Renderer r in zombie.GetComponentsInChildren<Renderer>())
+            {
+                r.GetPropertyBlock(block);
+                block.SetColor("_BaseColor", shade);
+                block.SetColor("_Color", shade);
+                r.SetPropertyBlock(block);
+            }
+            spawned.Add(zombie);
+        }
+        AnimationMode.EndSampling();
+
+        GameObject cameraObject = new GameObject("KeyArtCamera");
+        Camera camera = cameraObject.AddComponent<Camera>();
+        camera.cullingMask = 1 << Layer;
+        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.backgroundColor = new Color(0f, 0f, 0f, 0f);
+        camera.fieldOfView = 36f;
+        camera.nearClipPlane = 0.05f;
+        camera.farClipPlane = 60f;
+        camera.GetUniversalAdditionalCameraData().renderPostProcessing = false;
+        // at head height, far enough back to take in the whole horde
+        camera.transform.position = origin + new Vector3(0f, 1.3f, -5.4f);
+        camera.transform.rotation = Quaternion.Euler(1f, 0f, 0f);
+
+        Light key = NewLight(Quaternion.Euler(20f, 30f, 0f), new Color(0.8f, 0.84f, 0.92f), 1.5f);
+        Light rimRed = NewLight(Quaternion.Euler(12f, 200f, 0f), new Color(1f, 0.12f, 0.08f), 3f);
+        Light rimGreen = NewLight(Quaternion.Euler(25f, 150f, 0f), new Color(0.35f, 1f, 0.25f), 0.45f);
+        RenderSettings.ambientLight = new Color(0.2f, 0.19f, 0.2f);
+
+        Texture2D picture = WeaponArt.Supersample(camera, width, height);
+        // fade the bottom into transparency so the art melts into the menu
+        Color[] pixels = picture.GetPixels();
+        for (int y = 0; y < height; y++)
+        {
+            float fade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, height * 0.22f, y));
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * width + x;
+                pixels[i].a *= fade;
+            }
+        }
+        picture.SetPixels(pixels);
+        picture.Apply();
+        File.WriteAllBytes(output, picture.EncodeToPNG());
+        Object.DestroyImmediate(picture);
+
+        AnimationMode.StopAnimationMode();
+        foreach (GameObject zombie in spawned) Object.DestroyImmediate(zombie);
+        Object.DestroyImmediate(cameraObject);
+        Object.DestroyImmediate(key.gameObject);
+        Object.DestroyImmediate(rimRed.gameObject);
+        Object.DestroyImmediate(rimGreen.gameObject);
+
+        AssetDatabase.ImportAsset(output);
+        TextureImporter importer = (TextureImporter)AssetImporter.GetAtPath(output);
+        importer.textureType = TextureImporterType.Sprite;
+        importer.alphaIsTransparency = true;
+        importer.mipmapEnabled = false;
+        importer.maxTextureSize = 1024;
+        importer.SaveAndReimport();
+        Debug.Log("ZombieArt: key art rendered to " + output);
     }
 
     // the clip the game's animator plays for a state
