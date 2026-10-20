@@ -152,9 +152,10 @@ public class HuntSystem : GameSystem
         GameObject go = new GameObject("HuntRadar", typeof(RectTransform));
         radar = go.GetComponent<RectTransform>();
         radar.SetParent(canvas.rootCanvas.transform, false);
-        radar.anchorMin = radar.anchorMax = radar.pivot = new Vector2(0.5f, 0f);
-        radar.sizeDelta = new Vector2(150f, 150f);
-        radar.anchoredPosition = new Vector2(0f, 250f);
+        // bottom right, above SWAP, clear of FIRE
+        radar.anchorMin = radar.anchorMax = radar.pivot = new Vector2(1f, 0f);
+        radar.sizeDelta = new Vector2(140f, 140f);
+        radar.anchoredPosition = new Vector2(-24f, 190f);
         Image disc = UIStyle.AddPanel(go, new Color(0.03f, 0.08f, 0.03f, 0.75f));
         disc.raycastTarget = false;
 
@@ -188,13 +189,14 @@ public class HuntSystem : GameSystem
         radarText.name = "RadarText";
         foreach (Transform child in radarText.transform) Destroy(child.gameObject);
         RectTransform textRect = radarText.rectTransform;
-        textRect.anchorMin = new Vector2(-0.5f, -0.55f);
-        textRect.anchorMax = new Vector2(1.5f, -0.02f);
+        // distance and count sit above the radar
+        textRect.anchorMin = new Vector2(-0.6f, 1.02f);
+        textRect.anchorMax = new Vector2(1f, 1.55f);
         textRect.offsetMin = textRect.offsetMax = Vector2.zero;
         radarText.fontSize = 24f;
         radarText.enableAutoSizing = false;
         radarText.fontStyle = FontStyles.Bold;
-        radarText.alignment = TextAlignmentOptions.Top;
+        radarText.alignment = TextAlignmentOptions.BottomRight;
         radarText.color = Color.white;
         radarText.richText = true;
         radarText.raycastTarget = false;

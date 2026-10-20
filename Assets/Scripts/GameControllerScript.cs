@@ -133,6 +133,8 @@ public class GameControllerScript : MonoBehaviour
 
     void Start()
     {
+        DisableTemplateSpawner();
+
         // survivor level rewards
         Player.Setup();
         int streakBonus = Progression.BeginSession();
@@ -156,6 +158,17 @@ public class GameControllerScript : MonoBehaviour
         Progression.ShowStreakBonus(streakBonus);
 
         StartCoroutine(Scenes.Fade(1f, 0f));
+    }
+
+    // the scenes came from Unity's AR template, whose tap-to-place spawner drops its demo objects
+    // (a big first-aid cube) wherever a tap lands on a detected surface; the game never uses it
+    static void DisableTemplateSpawner()
+    {
+        foreach (MonoBehaviour behaviour in FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            string type = behaviour.GetType().Name;
+            if (type == "ARInteractorSpawnTrigger" || type == "ObjectSpawner") behaviour.enabled = false;
+        }
     }
 
     void Update()
