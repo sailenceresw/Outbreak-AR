@@ -65,9 +65,19 @@ Chapter 1 runs in `Level1.unity` and Chapter 2 in `Level2.unity`. Levels within 
 
 ## Features
 
+**Modes**
+- Campaign: eight levels over two chapters (below).
+- Endless: escalating waves with a short break between them; your ten best runs are kept.
+- Hunt: zombies hide around your real room. Follow the radar and their breathing; they wake when you get close, look straight at them or shoot.
+- World map: real GPS map with outbreak sites, boss nests and supply caches around you (rare caches at real parks), and rewards for walking.
+
+**Catching and the Zombie-dex**
+- Wound a zombie and throw a trap; the catch chance rises as it weakens. Rare glowing mutants.
+- The Zombie-dex shows a portrait of every kind you've met, with rarity and catch counts.
+
 **Augmented reality**
 - Depth occlusion: on phones with ARCore Depth (confirmed on a Redmi Note 10 Pro), zombies are hidden behind real furniture and walls.
-- Zombies rise from the floor plane ARCore detects, falling back to an estimate below the phone until one is found.
+- Zombies rise from the floor plane ARCore detects, with a warning first (blood seeps up and a groan comes from the spot). Later levels spawn them out of view so they walk in.
 - ARCore light estimation drives the scene lighting, and a shadow-catcher floor receives the zombies' shadows.
 - 3D positional sound: groans and footsteps come from the direction of each zombie.
 
@@ -76,7 +86,7 @@ Chapter 1 runs in `Level1.unity` and Chapter 2 in `Level2.unity`. Levels within 
 - Zombies curve in from the sides, stagger and react when shot, and roar before their first attack lands.
 
 **Combat**
-- Five guns: PT-9 Pistol, Magnum Revolver, Pump Shotgun, Vector SMG (hold to fire) and Assault Rifle (hold to fire). Carry a sidearm and a heavy gun and tap SWAP.
+- Five guns, each with its own model: PT-9 Pistol, Magnum Revolver, Pump Shotgun, Vector SMG (hold to fire) and Assault Rifle (hold to fire). Carry a sidearm and a heavy gun and tap SWAP.
 - Grenades, headshots, combos, hit-stop on kills and slow motion on a level's final kill.
 - Power-ups: Rapid Fire, Hollow Points, Cryo Pulse and Shockwave. Supply drops: ammo crates and med kits.
 
@@ -85,11 +95,15 @@ Chapter 1 runs in `Level1.unity` and Chapter 2 in `Level2.unity`. Levels within 
 - Three daily missions and a 7-day streak bonus.
 - Arsenal shop: guns, three upgrades per gun (damage, fire rate, ammo) and items (Grenade Pack, Adrenaline Shot revive, Ammo Cache).
 - Level select and per-level best scores, saved on the device.
+- Survivor profile: name, avatar, rank and lifetime stats.
+- 23 achievements with Supply Point rewards and an unlock banner.
 
 **Presentation**
-- Home screen, pause menu (also on the Android back button), settings for sound and vibration.
+- Home screen with rendered key art, pause menu (also on the Android back button), settings for sound, vibration and graphics quality (Low saves battery; High adds bloom and grain at 60 FPS).
+- A tutorial coach for the first fight, replayable from Settings.
+- Icons throughout the UI; shop pictures and Zombie-dex portraits are rendered from the game's own 3D models.
 - Post-processing: bloom, horror colour grade, film grain and a vignette that pulses when you're hurt.
-- Sound effects, particles and HUD graphics are generated in code.
+- Sound effects and particles are generated in code.
 
 ## Getting started
 
@@ -115,8 +129,16 @@ On machines with 8 GB of RAM, set `BEE_BUILD_THREADS=3` first, or the native com
 
 | Script | Role |
 |---|---|
-| `GameControllerScript` | Game flow, levels, spawning, shooting, score |
+| `GameControllerScript` | Entry point in each scene: holds the inspector settings, adds the parts below and ticks them in order |
+| `Game/LevelFlowManager` | Game state, levels, objectives, Endless waves, win, lose and retry, score |
+| `Game/SpawnManager` | Spawning with warnings, hordes, bosses, hunt placement |
+| `Game/WeaponSystem`, `Game/WeaponModels` | Ammo, firing, hit detection, grenades, aim, held gun models |
+| `Game/PlayerHealth`, `Game/PickupManager`, `Game/CaptureSystem`, `Game/HuntSystem` | Health, pickups and power-ups, traps, hunt radar |
+| `Game/UIController`, `Game/ProgressionManager`, `Game/SceneFlow`, `Game/TutorialCoach` | HUD and menus, XP and missions, scene loads, tutorial |
 | `ZombieController` | Zombie types, movement, flanking, attacks, gore, boss behaviour |
+| `ZombieDex`, `CaptureTrap`, `DexMenu` | Catching and the Zombie-dex |
+| `MapScreen`, `MapSites`, `GameModes` | World map, sites and caches, Endless and Hunt setup |
+| `ProfileMenu`, `LifetimeStats`, `Achievements`, `AchievementsMenu` | Profile, stats and achievements |
 | `AcidGlob`, `Grenade` | Spitter acid and thrown grenades |
 | `Arsenal`, `Inventory` | Guns, upgrades and items (saved on the device) |
 | `LevelCatalog` | Level definitions and saved progress (`GameProgress`) |
@@ -127,7 +149,12 @@ On machines with 8 GB of RAM, set `BEE_BUILD_THREADS=3` first, or the native com
 | `PostFX`, `GameFX`, `GameAudio`, `UIStyle` | Post-processing, particles, generated sound and UI style |
 | `Editor/BuildAndroid` | Command-line and menu Android build |
 | `Editor/MixamoImporter`, `Editor/MixamoCharacterSetup`, `Editor/ZombieAnimatorBuilder` | Mixamo import rules, character textures and the zombie animator |
+| `Editor/WeaponArt`, `Editor/ZombieArt` | Gun materials, shop pictures, Dex portraits and home key art, rendered from the 3D models |
 
 ## Credits
 
-The zombie characters and animations are from Adobe Mixamo. The original zombie pack, the PT-9M pistol, the music and the gunshot sound are third-party assets owned by their respective creators.
+- Zombie characters and animations: Adobe Mixamo.
+- Revolver, shotgun, SMG and rifle models: [Ultimate Gun Pack](https://quaternius.com) by Quaternius (CC0).
+- Icons: [game-icons.net](https://game-icons.net) by Lorc, Delapouite, Skoll, sbed, Guard13007 and Zeromancer, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Per-icon credits are in `Assets/Resources/Icons/CREDITS.txt`.
+- Map tiles: © Esri, HERE, Garmin; map data © OpenStreetMap contributors.
+- The original zombie pack, the PT-9M pistol, the music and the gunshot sound are third-party assets owned by their respective creators.
