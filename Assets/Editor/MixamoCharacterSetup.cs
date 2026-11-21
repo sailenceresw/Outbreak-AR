@@ -104,20 +104,26 @@ public static class MixamoCharacterSetup
             material.EnableKeyword("_NORMALMAP");
         }
 
-        // solid, damp skin
-        material.SetFloat("_Surface", 0f);
-        material.SetFloat("_Blend", 0f);
-        material.SetFloat("_AlphaClip", 0f);
-        material.SetFloat("_SrcBlend", 1f);
-        material.SetFloat("_DstBlend", 0f);
-        material.SetFloat("_ZWrite", 1f);
-        material.SetOverrideTag("RenderType", "Opaque");
-        material.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-        material.renderQueue = -1;
+        // Mixamo hair is drawn on flat cards whose shape lives in the diffuse texture's alpha. Rendered
+        // opaque, the cards show as solid sheets, so a texture with alpha gets cut out and both faces drawn.
+        // Skin and clothing without alpha stay solid and back-face culled.
+        if (HasAlpha(diffuse)) UrpSurface.Cutout(material, 0.4f, doubleSided: true);
+        else UrpSurface.Opaque(material);
+
+        // damp skin
         material.SetFloat("_Metallic", 0f);
         material.SetFloat("_Smoothness", 0.35f);
         EditorUtility.SetDirty(material);
+    }
+
+    // true when the source image has a real alpha channel and the importer keeps it
+    static bool HasAlpha(Texture2D texture)
+    {
+        if (texture == null) return false;
+        TextureImporter importer = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture)) as TextureImporter;
+        if (importer == null) return false;
+        if (importer.alphaSource == TextureImporterAlphaSource.None) return false;
+        return importer.DoesSourceTextureHaveAlpha();
     }
 
     // score each texture of the right kind: words it shares with the material count for it, words the
