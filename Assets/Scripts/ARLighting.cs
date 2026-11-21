@@ -1,16 +1,19 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using Unity.XR.CoreUtils;
 using UnityEngine.XR.ARFoundation;
 
 // Lights the virtual scene like the real room: ARCore's light estimate drives the main light and
-// ambient light, and a transparent "shadow catcher" floor lets zombies cast shadows onto the real floor.
+// ambient light, a transparent "shadow catcher" floor lets zombies cast shadows onto the real floor, and
+// environment probes capture the room so metal and wet skin reflect what is really around the player.
 public class ARLighting : MonoBehaviour
 {
     const float ShadowDistance = 12f;
     const float FloorSize = 40f;
 
     ARCameraManager cameraManager;
+    AREnvironmentProbeManager probeManager;
     Light mainLight;
     Transform floor;
     float targetIntensity = 1f;
@@ -53,11 +56,36 @@ public class ARLighting : MonoBehaviour
         }
 
         CreateShadowFloor(arCamera, floorBelowCamera);
+        CreateEnvironmentProbes();
     }
 
     void OnDestroy()
     {
         if (cameraManager != null) cameraManager.frameReceived -= OnFrameReceived;
+        GameSettings.QualityChanged -= ApplyQuality;
+    }
+
+    // ARCore builds cube maps of the real room and places them automatically; Unity blends them into
+    // reflections on the gun and the zombies. Devices without support simply get no probes.
+    void CreateEnvironmentProbes()
+    {
+        XROrigin origin = FindFirstObjectByType<XROrigin>();
+        if (origin == null) return;
+
+        probeManager = origin.GetComponent<AREnvironmentProbeManager>();
+        if (probeManager == null) probeManager = origin.gameObject.AddComponent<AREnvironmentProbeManager>();
+        probeManager.automaticPlacementRequested = true;
+        probeManager.environmentTextureHDRRequested = true;
+        probeManager.environmentTextureFilterMode = FilterMode.Trilinear;
+
+        ApplyQuality();
+        GameSettings.QualityChanged += ApplyQuality;
+    }
+
+    // the probes cost camera-frame processing and memory, so Low quality turns them off to save battery
+    void ApplyQuality()
+    {
+        if (probeManager != null) probeManager.enabled = GameSettings.HighQuality;
     }
 
     void OnFrameReceived(ARCameraFrameEventArgs args)
