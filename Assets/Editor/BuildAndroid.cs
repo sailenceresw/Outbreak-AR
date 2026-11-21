@@ -14,6 +14,8 @@ public static class BuildAndroid
     {
         // keep the zombie materials on the full Lit shader; safe to run every build
         ZombieMaterialUpgrade.Upgrade();
+        // the PT-9M pistol's HDRP and Standard materials, moved to URP Lit with the pack's own maps
+        PistolMaterialUpgrade.Upgrade();
         // the Mixamo animation set, retargeted onto every zombie model
         ZombieAnimatorBuilder.Build();
         // the Mixamo characters' skin textures, wired to editable materials
